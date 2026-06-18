@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ギター指板 アドバンスド・トレーナー</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            width: 95%;
+            max-width: 1000px;
+        }
+        
+        /* ヘッダーエリア */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e5e5;
+            padding-bottom: 12px;
+        }
+        h1 {
+            font-size: 1.3rem;
+            color: #333;
+            margin: 0;
+        }
+        .mode-toggle-btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border: 2px solid #0071e3;
+            border-radius: 20px;
+            background: white;
+            color: #0071e3;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-toggle-btn:hover {
+            background: #f0f7ff;
+        }
+
+        /* 設定コントロールエリア */
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .row-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .switch-btn {
+            padding: 6px 16px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border: 2px solid #8e8e93;
+            border-radius: 20px;
+            background: white;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .switch-btn.active {
+            border-color: #0071e3;
+            background: #0071e3;
+            color: white;
+        }
+
+        /* 出題範囲設定パネル */
+        .settings-panel {
+            background-color: #f5f5f7;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #d1d1d6;
+        }
+        .settings-title {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 6px;
+        }
+        .checkbox-group {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .checkbox-label {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .display-area {
+            min-height: 65px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #fafafa;
+            border-radius: 8px;
+            border: 1px solid #e5e5e5;
+            text-align: center;
+        }
+        .question {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #0071e3;
+        }
+        .analyzer-instruction {
+            font-size: 0.95rem;
+            color: #666;
+        }
+        
+        /* 指板テーブル */
+        .fretboard-wrapper {
+            overflow-x: auto;
+            margin-bottom: 24px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            background: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 2px;
+            text-align: center;
+            min-width: 32px;
+            height: 34px;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        td:first-child, th:first-child {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        
+        /* アナライザーモード時の、指板マスのホバーエフェクト */
+        body.mode-analyzer td.fret-cell:hover {
+            background-color: #eef7ff !important;
+            cursor: pointer;
+        }
+        
+        /* ポジションマーク背景 */
+        .dot-fret { background-color: #f9f9f9; }
+        .double-dot-fret { background-color: #e5e5e5; }
+
+        /* 13F以降の非表示制御用 */
+        .extended-fret {
+            display: none;
+        }
+
+        /* マーカー（丸） */
+        .target-marker {
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 28px;
+            height: 28px;
+            background-color: #0071e3;
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 0.7rem;
+            visibility: hidden;
+            box-sizing: border-box;
+            line-height: 1;
+            pointer-events: none; /* マス自体のクリックイベントを邪魔しない */
+        }
+        .target-marker span.octave {
+            font-size: 0.5rem;
+            opacity: 0.9;
+            margin-top: 1px;
+        }
+        
+        .target-marker.visible-on {
+            visibility: visible !important;
+            animation: pop 0.15s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1); }
+        }
+
+        /* 12音ボタン */
+        .choices-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 480px) {
+            .choices-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        .choice-btn {
+            padding: 12px 4px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            background-color: #f0f0f2;
+            color: #333;
+            border: 2px solid #d1d1d6;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .choice-btn.correct {
+            background-color: #34c759 !important;
+            border-color: #34c759 !important;
+            color: white;
+        }
+        .choice-btn.wrong {
+            background-color: #ff3b30 !important;
+            border-color: #ff3b30 !important;
+            color: white;
+            opacity: 0.6;
+        }
+
+        .control-btn-wrapper {
+            text-align: center;
+        }
+        .control-btn {
+            width: 100%;
+            max-width: 300px;
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #0071e3;
+            color: white;
+        }
+        .control-btn:hover { background-color: #005bb5; }
+    </style>
+</head>
+<body class="mode-quiz"> <div class="container">
+    <div class="app-header">
+        <h1>ギター指板 フルレンジ・トレーナー</h1>
+        <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
+    </div>
+    
+    <div class="control-panel">
+        <div class="row-group">
+            <span style="font-size: 0.85rem; font-weight: bold; color: #555;">表示レンジ:</span>
+            <button id="range-12" class="switch-btn active" onclick="switchRange(12)">12 フレット</button>
+            <button id="range-24" class="switch-btn" onclick="switchRange(24)">24 フレット</button>
+        </div>
+        
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-title">出題する弦を選択</div>
+            <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" id="chk-1" value="1"> 1弦</label>
+                <label class="checkbox-label"><input type="checkbox" id="chk-2" value="2"> 2弦</label>
+                <label class="checkbox-label"><input type="checkbox" id="chk-3" value="3"> 3弦</label>
+                <label class="checkbox-label"><input type="checkbox" id="chk-4" value="4"> 4弦</label>
+                <label class="checkbox-label"><input type="checkbox" id="chk-5" value="5" checked> 5弦</label>
+                <label class="checkbox-label"><input type="checkbox" id="chk-6" value="6" checked> 6弦</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="display-area">
+        <div id="displayContent" class="question">「スタート」を押してね</div>
+    </div>
+
+    <div class="fretboard-wrapper">
+        <table>
+            <thead id="fretboard-head">
+                </thead>
+            <tbody id="fretboard-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="choices-grid" id="choicesGrid">
+        </div>
+
+    <div id="controlWrapper" class="control-btn-wrapper">
+        <button id="actionBtn" class="control-btn" onclick="nextQuestion()">スタート</button>
+    </div>
+</div>
+
+<script>
+    const allNotes = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab"];
+
+    const noteColors = {
+        "A": "#FF3B30", "A#/Bb": "#FF9500", "B": "#FFCC00", "C": "#34C759",
+        "C#/Db": "#00C7BE", "D": "#0071e3", "D#/Eb": "#5856D6", "E": "#AF52DE",
+        "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
+    };
+
+    const pattern = ["E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb"];
+    const startIndices = { 1: 0, 2: 7, 3: 3, 4: 10, 5: 5, 6: 0 };
+    const startOctaves = { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 2 };
+
+    const boardData = {};
+    for (let s = 1; s <= 6; s++) {
+        boardData[s] = [];
+        let pIdx = startIndices[s];
+        let currentOct = startOctaves[s];
+        
+        for (let f = 0; f <= 24; f++) {
+            let noteName = pattern[pIdx];
+            if (f > 0 && noteName === "C") {
+                currentOct++;
+            }
+            boardData[s].push({ n: noteName, o: currentOct });
+            pIdx = (pIdx + 1) % 12;
+        }
+    }
+
+    let currentMode = 'quiz';
+    let maxFretRange = 12;
+    let currentString = 0;
+    let currentFret = 0;
+    let correctAnswer = "";
+    let isAnswered = false;
+    let activeAnalyzerNotes = new Set();
+    
+    // マス個別クリック用：点灯している座標(文字列形式 '弦-フレット' )を記録するセット
+    let individuallyLitMarkers = new Set();
+
+    // テーブルヘッダーの生成
+    const thead = document.getElementById('fretboard-head');
+    const trHead = document.createElement('tr');
+    trHead.innerHTML = '<th>弦 \\ F</th>';
+    for (let f = 0; f <= 24; f++) {
+        let classes = [];
+        if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
+        if (f === 12 || f === 24) classes.push('double-dot-fret');
+        if (f > 12) classes.push('extended-fret');
+        
+        let clsAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : '';
+        trHead.innerHTML += `<th id="th-fret-${f}" ${clsAttr}>${f}</th>`;
+    }
+    thead.appendChild(trHead);
+
+    // 表のボディ生成
+    const tbody = document.getElementById('fretboard-body');
+    for (let s = 1; s <= 6; s++) {
+        const tr = document.createElement('tr');
+        tr.id = `string-${s}`;
+        const tdLabel = document.createElement('td');
+        tdLabel.innerText = `${s}弦`;
+        tr.appendChild(tdLabel);
+        
+        for (let f = 0; f <= 24; f++) {
+            const td = document.createElement('td');
+            let classes = ['fret-cell']; // 個別クリックイベント用の識別クラス
+            if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
+            if (f === 12 || f === 24) classes.push('double-dot-fret');
+            if (f > 12) classes.push('extended-fret');
+            td.className = classes.join(' ');
+            td.id = `td-${s}-${f}`;
+            
+            // マスをクリックしたときの処理を追加
+            td.onclick = () => handleFretCellClick(s, f);
+            
+            const span = document.createElement('span');
+            span.className = 'target-marker';
+            span.id = `marker-${s}-${f}`;
+            span.innerHTML = `<span class="note-text">●</span><span class="octave"></span>`;
+            
+            td.appendChild(span);
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    }
+
+    // 12音ボタン生成
+    const grid = document.getElementById('choicesGrid');
+    allNotes.forEach(note => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.id = `btn-${note.replace('/', '-')}`;
+        btn.innerText = note;
+        btn.disabled = true;
+        btn.onclick = () => handleNoteClick(note, btn);
+        grid.appendChild(btn);
+    });
+
+    // モード切り替え
+    function toggleMode() {
+        const nextMode = (currentMode === 'quiz') ? 'analyzer' : 'quiz';
+        currentMode = nextMode;
+        
+        const toggleBtn = document.getElementById('modeToggleBtn');
+        
+        if (currentMode === 'quiz') {
+            document.body.className = 'mode-quiz';
+            toggleBtn.innerText = 'アナライザーへ';
+            document.getElementById('settingsPanel').style.display = 'block';
+            document.getElementById('controlWrapper').style.display = 'block';
+            document.getElementById('displayContent').className = 'question';
+            document.getElementById('displayContent').innerText = '「スタート」を押してね';
+            disableAllChoiceButtons(true);
+        } else {
+            document.body.className = 'mode-analyzer';
+            toggleBtn.innerText = 'クイズモードへ';
+            document.getElementById('settingsPanel').style.display = 'none';
+            document.getElementById('controlWrapper').style.display = 'none';
+            document.getElementById('displayContent').className = 'analyzer-instruction';
+            document.getElementById('displayContent').innerText = '指板のマスを直接押すか、下のボタンで対応する音名を全点灯できます';
+            disableAllChoiceButtons(false);
+        }
+        
+        resetAll();
+    }
+
+    // フレットレンジの切り替え
+    function switchRange(range) {
+        maxFretRange = range;
+        document.getElementById('range-12').classList.toggle('active', range === 12);
+        document.getElementById('range-24').classList.toggle('active', range === 24);
+        
+        const extendedElements = document.querySelectorAll('.extended-fret');
+        extendedElements.forEach(el => {
+            el.style.display = (range === 24) ? 'table-cell' : 'none';
+        });
+
+        resetAll();
+        if (currentMode === 'quiz') {
+            document.getElementById('displayContent').innerText = '「スタート」を押してね';
+            disableAllChoiceButtons(true);
+            document.getElementById('actionBtn').style.visibility = 'visible';
+            document.getElementById('actionBtn').innerText = 'スタート';
+        }
+    }
+
+    function handleNoteClick(note, btn) {
+        if (currentMode === 'quiz') {
+            checkAnswer(note, btn);
+        } else {
+            toggleAnalyzerNote(note, btn);
+        }
+    }
+
+    /* ================= アナライザー：特定の座標（マス）クリック機能 ================= */
+    function handleFretCellClick(string, fret) {
+        // アナライザーモードのときだけ動作させる
+        if (currentMode !== 'analyzer') return;
+
+        const coordKey = `${string}-${fret}`;
+        const data = boardData[string][fret];
+        
+        if (individuallyLitMarkers.has(coordKey)) {
+            // すでに個別点灯している場合は消灯
+            individuallyLitMarkers.delete(coordKey);
+        } else {
+            // 点灯していない場合は座標を登録
+            individuallyLitMarkers.add(coordKey);
+        }
+        
+        // 画面の下ボタンの状態も考慮しつつ、指板の描画をリフレッシュ
+        updateAnalyzerMarkers();
+    }
+
+    /* ================= クイズモード ================= */
+    function nextQuestion() {
+        const selectedStrings = [];
+        for (let s = 1; s <= 6; s++) {
+            if (document.getElementById(`chk-${s}`).checked) selectedStrings.push(s);
+        }
+        if (selectedStrings.length === 0) {
+            alert("出題する弦を最低1つはチェックしてください！");
+            return;
+        }
+
+        isAnswered = false;
+        resetAll();
+
+        const randomIndex = Math.floor(Math.random() * selectedStrings.length);
+        currentString = selectedStrings[randomIndex];
+        currentFret = Math.floor(Math.random() * (maxFretRange + 1));
+        correctAnswer = boardData[currentString][currentFret].n;
+
+        document.getElementById('displayContent').innerText = `${currentString}弦 ${currentFret}フレット`;
+        
+        const activeMarker = document.getElementById(`marker-${currentString}-${currentFret}`);
+        if (activeMarker) {
+            activeMarker.style.backgroundColor = '#0071e3';
+            activeMarker.classList.add('visible-on');
+        }
+
+        toggleCheckboxes(true);
+        disableAllChoiceButtons(false);
+        document.getElementById('actionBtn').style.visibility = 'hidden';
+    }
+
+    function checkAnswer(selectedNote, clickedBtn) {
+        if (isAnswered) return;
+
+        if (selectedNote === correctAnswer) {
+            isAnswered = true;
+            clickedBtn.classList.add('correct');
+            
+            const activeMarker = document.getElementById(`marker-${currentString}-${currentFret}`);
+            const data = boardData[currentString][currentFret];
+            if (activeMarker) {
+                activeMarker.querySelector('.note-text').innerText = data.n;
+                activeMarker.querySelector('.octave').innerText = data.o;
+                activeMarker.style.backgroundColor = noteColors[data.n];
+                activeMarker.classList.add('visible-on');
+            }
+
+            disableAllChoiceButtons(true);
+            document.getElementById('actionBtn').style.visibility = 'visible';
+            document.getElementById('actionBtn').innerText = '次の問題';
+            toggleCheckboxes(false);
+        } else {
+            clickedBtn.classList.add('wrong');
+            clickedBtn.disabled = true;
+        }
+    }
+
+    /* ================= アナライザーモード ================= */
+    function toggleAnalyzerNote(note, btn) {
+        if (activeAnalyzerNotes.has(note)) {
+            activeAnalyzerNotes.delete(note);
+            btn.style.backgroundColor = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+            
+            // ★ここを追加：下のボタンがオフになった音名について、セルの個別クリック記憶もすべて削除する
+            for (let s = 1; s <= 6; s++) {
+                for (let f = 0; f <= 24; f++) {
+                    if (boardData[s][f].n === note) {
+                        individuallyLitMarkers.delete(`${s}-${f}`);
+                    }
+                }
+            }
+        } else {
+            activeAnalyzerNotes.add(note);
+            btn.style.backgroundColor = noteColors[note];
+            btn.style.borderColor = noteColors[note];
+            btn.style.color = 'white';
+        }
+        updateAnalyzerMarkers();
+    }
+
+    function updateAnalyzerMarkers() {
+        for (let s = 1; s <= 6; s++) {
+            for (let f = 0; f <= maxFretRange; f++) {
+                const marker = document.getElementById(`marker-${s}-${f}`);
+                const data = boardData[s][f];
+                const coordKey = `${s}-${f}`;
+                
+                // 「下の音名ボタンがON」または「そのマスが個別クリックでON」のどちらかであれば点灯
+                if (activeAnalyzerNotes.has(data.n) || individuallyLitMarkers.has(coordKey)) {
+                    marker.querySelector('.note-text').innerText = data.n;
+                    marker.querySelector('.octave').innerText = data.o;
+                    marker.style.backgroundColor = noteColors[data.n];
+                    marker.classList.add('visible-on');
+                } else {
+                    marker.style.backgroundColor = '';
+                    marker.classList.remove('visible-on');
+                    marker.querySelector('.note-text').innerText = '●';
+                    marker.querySelector('.octave').innerText = '';
+                }
+            }
+        }
+    }
+
+    /* ================= ユーティリティ ================= */
+    function resetAll() {
+        activeAnalyzerNotes.clear();
+        individuallyLitMarkers.clear(); // 個別クリックの記憶もリセット
+        for (let s = 1; s <= 6; s++) {
+            for (let f = 0; f <= 24; f++) {
+                const marker = document.getElementById(`marker-${s}-${f}`);
+                if (marker) {
+                    marker.style.visibility = 'hidden';
+                    marker.style.backgroundColor = '';
+                    marker.className = 'target-marker';
+                    marker.querySelector('.note-text').innerText = '●';
+                    marker.querySelector('.octave').innerText = '';
+                }
+            }
+        }
+        const buttons = document.querySelectorAll('.choice-btn');
+        buttons.forEach(btn => {
+            btn.className = 'choice-btn';
+            btn.style.backgroundColor = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        });
+    }
+
+    function disableAllChoiceButtons(disabled) {
+        document.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = disabled);
+    }
+
+    function toggleCheckboxes(disabled) {
+        for (let s = 1; s <= 6; s++) {
+            document.getElementById(`chk-${s}`).disabled = disabled;
+        }
+    }
+</script>
+
+</body>
+</html>
