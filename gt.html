@@ -24,7 +24,7 @@
             width: 95%;
             max-width: 1000px;
         }
-        
+
         /* ヘッダーエリア */
         .app-header {
             display: flex;
@@ -97,7 +97,7 @@
             gap: 12px;
             flex-wrap: wrap;
         }
-        
+
         .switch-btn {
             padding: 6px 16px;
             font-size: 0.85rem;
@@ -190,7 +190,7 @@
             font-size: 0.95rem;
             color: #666;
         }
-        
+
         /* 指板テーブル */
         .fretboard-wrapper {
             overflow-x: auto;
@@ -223,12 +223,12 @@
             z-index: 2;
             box-shadow: 2px 0 5px rgba(0,0,0,0.05);
         }
-        
+
         body.mode-analyzer td.fret-cell:hover {
             background-color: #eef7ff !important;
             cursor: pointer;
         }
-        
+
         .dot-fret { background-color: #f9f9f9; }
         .double-dot-fret { background-color: #e5e5e5; }
 
@@ -259,10 +259,10 @@
             opacity: 0.9;
             margin-top: 1px;
         }
-        
+
         /* ルート音 (Root) の強調スタイル */
         .target-marker.root-note {
-            background-color: #f5a623 !important; /* 金色 */
+            background-color: #f5a623 !important;
             box-shadow: 0 0 10px rgba(245, 166, 35, 0.8);
             border: 2px solid #fff;
             transform: scale(1.1);
@@ -305,7 +305,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .choice-btn.correct {
             background-color: #34c759 !important;
             border-color: #34c759 !important;
@@ -499,7 +499,7 @@
             <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
         </div>
     </div>
-    
+
     <div class="control-panel">
         <div class="row-group">
             <span style="font-size: 0.85rem; font-weight: bold; color: #555;">表示レンジ:</span>
@@ -513,7 +513,7 @@
                 <option value="dropD">Drop D (1E, 2B, 3G, 4D, 5A, 6D)</option>
             </select>
         </div>
-        
+
         <div class="settings-panel" id="settingsPanel">
             <div class="settings-title">出題する弦を選択</div>
             <div class="checkbox-group">
@@ -555,10 +555,8 @@
 
     <div class="fretboard-wrapper">
         <table>
-            <thead id="fretboard-head">
-                </thead>
-            <tbody id="fretboard-body">
-                </tbody>
+            <thead id="fretboard-head"></thead>
+            <tbody id="fretboard-body"></tbody>
         </table>
     </div>
 
@@ -578,8 +576,7 @@
 
     <div class="chord-grid" id="chordGrid"></div>
 
-    <div class="choices-grid" id="choicesGrid">
-        </div>
+    <div class="choices-grid" id="choicesGrid"></div>
 
     <div id="controlWrapper" class="control-btn-wrapper">
         <button id="actionBtn" class="control-btn" onclick="nextQuestion()">スタート</button>
@@ -587,26 +584,249 @@
 </div>
 
 <script>
+    // =====================
+    // 定数（音楽データ）
+    // =====================
     const chromaticScale = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
-    const allNotes = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab"];
+    const allNotes       = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab"];
 
-    // 度数表示用のマッピング（半音ステップ数 -> 度数記号）
     const intervalMap = {
         0: "R", 1: "b2", 2: "2", 3: "b3", 4: "3", 5: "4", 6: "#4/b5", 7: "5", 8: "b6", 9: "6", 10: "b7", 11: "7"
     };
-
     const noteColors = {
         "A": "#FF3B30", "A#/Bb": "#FF9500", "B": "#FFCC00", "C": "#34C759",
         "C#/Db": "#00C7BE", "D": "#0071e3", "D#/Eb": "#5856D6", "E": "#AF52DE",
         "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
     };
-
+    const scaleIntervals = {
+        major:      [0, 2, 4, 5, 7, 9, 11],
+        minor:      [0, 2, 3, 5, 7, 8, 10],
+        majorPenta: [0, 2, 4, 7, 9],
+        minorPenta: [0, 3, 5, 7, 10]
+    };
     const diatonicChordQualities = {
         major: ['maj', 'min', 'min', 'maj', 'maj', 'min', 'dim'],
         minor: ['min', 'dim', 'maj', 'min', 'min', 'maj', 'maj'],
     };
-    const chordIntervalMap = { maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6] };
+    const chordIntervalMap  = { maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6] };
     const romanNumeralsBase = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+    const progressionData = {
+        major: [
+            { name: 'カノン',        degrees: [1,5,6,3,4,1,4,5] },
+            { name: '王道',          degrees: [4,5,3,6] },
+            { name: 'ii-V-I',       degrees: [2,5,1] },
+            { name: 'I-IV-V',       degrees: [1,4,5] },
+            { name: 'I-V-vi-IV',    degrees: [1,5,6,4] },
+        ],
+        minor: [
+            { name: '小室',          degrees: [1,7,6,7] },
+            { name: 'i-VII-VI-V',   degrees: [1,7,6,5] },
+            { name: 'i-iv-VII',     degrees: [1,4,7] },
+            { name: 'i-VI-III-VII', degrees: [1,6,3,7] },
+        ],
+    };
+    const tuningPresets = {
+        regular:      { 1:{n:"E",o:4}, 2:{n:"B",o:3}, 3:{n:"G",o:3}, 4:{n:"D",o:3}, 5:{n:"A",o:2}, 6:{n:"E",o:2} },
+        halfStepDown: { 1:{n:"D#/Eb",o:4}, 2:{n:"A#/Bb",o:3}, 3:{n:"F#/Gb",o:3}, 4:{n:"C#/Db",o:3}, 5:{n:"G#/Ab",o:2}, 6:{n:"D#/Eb",o:2} },
+        dropD:        { 1:{n:"E",o:4}, 2:{n:"B",o:3}, 3:{n:"G",o:3}, 4:{n:"D",o:3}, 5:{n:"A",o:2}, 6:{n:"D",o:2} }
+    };
+
+    // =====================
+    // 状態変数
+    // =====================
+    let boardData            = {};
+    let currentMode          = 'quiz';
+    let displayMode          = 'note';  // 'note' | 'interval'
+    let maxFretRange         = 12;
+    let currentString        = 0;
+    let currentFret          = 0;
+    let correctAnswer        = "";
+    let isAnswered           = false;
+    let activeAnalyzerNotes    = new Set();
+    let individuallyLitMarkers = new Set();
+    let progressionTimers      = [];
+    let isProgressionPlaying   = false;
+    let currentChordTones      = [];
+    let currentChordNotes      = new Set();
+    let audioCtx               = null;
+
+    // =====================
+    // 初期化
+    // =====================
+    generateBoardData('regular');
+    buildFretboard();
+    buildChoiceButtons();
+
+    function buildFretboard() {
+        const dotFrets       = [3, 5, 7, 9, 15, 17, 19, 21];
+        const doubleDotFrets = [12, 24];
+
+        const trHead = document.createElement('tr');
+        trHead.innerHTML = '<th>弦 \\ F</th>';
+        for (let f = 0; f <= 24; f++) {
+            const cls = [
+                dotFrets.includes(f)       ? 'dot-fret'        : '',
+                doubleDotFrets.includes(f) ? 'double-dot-fret' : '',
+                f > 12                     ? 'extended-fret'   : '',
+            ].filter(Boolean).join(' ');
+            trHead.innerHTML += `<th id="th-fret-${f}"${cls ? ` class="${cls}"` : ''}>${f}</th>`;
+        }
+        document.getElementById('fretboard-head').appendChild(trHead);
+
+        const tbody = document.getElementById('fretboard-body');
+        for (let s = 1; s <= 6; s++) {
+            const tr = document.createElement('tr');
+            tr.id = `string-${s}`;
+            tr.innerHTML = `<td id="string-label-${s}">${s}弦</td>`;
+            for (let f = 0; f <= 24; f++) {
+                const td  = document.createElement('td');
+                const cls = ['fret-cell',
+                    dotFrets.includes(f)       ? 'dot-fret'        : '',
+                    doubleDotFrets.includes(f) ? 'double-dot-fret' : '',
+                    f > 12                     ? 'extended-fret'   : '',
+                ].filter(Boolean).join(' ');
+                td.className = cls;
+                td.id        = `td-${s}-${f}`;
+                td.onclick   = () => handleFretCellClick(s, f);
+                td.innerHTML = `<span class="target-marker" id="marker-${s}-${f}"><span class="note-text">●</span><span class="octave"></span></span>`;
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        }
+    }
+
+    function buildChoiceButtons() {
+        const grid = document.getElementById('choicesGrid');
+        allNotes.forEach(note => {
+            const btn     = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.id        = `btn-${note.replace('/', '-')}`;
+            btn.innerText = note;
+            btn.disabled  = true;
+            btn.onclick   = () => handleNoteClick(note, btn);
+            grid.appendChild(btn);
+        });
+    }
+
+    // =====================
+    // 音声
+    // =====================
+    function playGuitarNote(noteName, octave) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const noteValues = { C:0, "C#":1, D:2, "D#":3, E:4, F:5, "F#":6, G:7, "G#":8, A:9, "A#":10, B:11 };
+        const targetNote = noteName.split('/')[0];
+        const frequency  = 440 * Math.pow(2, (noteValues[targetNote] + octave * 12 - (noteValues["A"] + 48)) / 12);
+        const masterVol  = parseFloat(document.getElementById('volumeSlider').value);
+        if (masterVol === 0) return;
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const now  = audioCtx.currentTime;
+        osc.type = 'triangle';
+        osc.frequency.value = frequency;
+        gain.gain.setValueAtTime(masterVol, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 1.2);
+    }
+
+    // =====================
+    // 指板データ生成
+    // =====================
+    function generateBoardData(tuningKey) {
+        const preset = tuningPresets[tuningKey];
+        boardData = {};
+        for (let s = 1; s <= 6; s++) {
+            boardData[s] = [];
+            let oct  = preset[s].o;
+            let pIdx = chromaticScale.indexOf(preset[s].n);
+            for (let f = 0; f <= 24; f++) {
+                const noteName = chromaticScale[pIdx];
+                if (f > 0 && noteName === "C") oct++;
+                boardData[s].push({ n: noteName, o: oct });
+                pIdx = (pIdx + 1) % 12;
+            }
+        }
+    }
+
+    // =====================
+    // 共通UI
+    // =====================
+
+    // モードに応じたDOM表示を一括管理する唯一の関数
+    function applyModeUI(mode) {
+        const isQuiz = mode === 'quiz';
+        document.body.className = isQuiz ? 'mode-quiz' : 'mode-analyzer';
+        document.getElementById('modeToggleBtn').innerText         = isQuiz ? 'アナライザーへ' : 'クイズモードへ';
+        document.getElementById('settingsPanel').style.display     = isQuiz ? 'block' : 'none';
+        document.getElementById('scalePanel').style.display        = isQuiz ? 'none'  : 'block';
+        document.getElementById('controlWrapper').style.display    = isQuiz ? 'block' : 'none';
+        document.getElementById('choicesGrid').style.display       = 'grid';
+        document.getElementById('chordGrid').style.display         = 'none';
+        document.getElementById('chordTonesDisplay').style.display = 'none';
+        document.getElementById('progressionPanel').style.display  = 'none';
+        const dc = document.getElementById('displayContent');
+        dc.className = isQuiz ? 'question' : 'analyzer-instruction';
+        dc.innerText  = isQuiz
+            ? '「スタート」を押してね'
+            : '指板を直接押すか、スケールを選んでダイアトニックコードを確認しましょう';
+        disableAllChoiceButtons(isQuiz);
+    }
+
+    function toggleDisplayMode() {
+        displayMode = (displayMode === 'note') ? 'interval' : 'note';
+        const btn = document.getElementById('displayToggleBtn');
+        btn.innerText = displayMode === 'note' ? '表示: 音名' : '表示: 度数';
+        btn.classList.toggle('active', displayMode === 'interval');
+        if (currentMode === 'analyzer') {
+            updateAnalyzerMarkers();
+            if (currentChordTones.length > 0) renderChordToneCircles();
+        } else if (isAnswered) {
+            updateMarkerContent(
+                document.getElementById(`marker-${currentString}-${currentFret}`),
+                boardData[currentString][currentFret]
+            );
+        }
+    }
+
+    function updateMarkerContent(marker, data) {
+        if (displayMode === 'interval') {
+            const key      = document.getElementById('keySelect').value;
+            const steps    = (chromaticScale.indexOf(data.n) - chromaticScale.indexOf(key) + 12) % 12;
+            const interval = intervalMap[steps];
+            marker.querySelector('.note-text').innerText = interval;
+            marker.querySelector('.octave').innerText    = '';
+            marker.classList.toggle('root-note', interval === "R");
+        } else {
+            marker.querySelector('.note-text').innerText = data.n;
+            marker.querySelector('.octave').innerText    = data.o;
+            marker.classList.remove('root-note');
+        }
+    }
+
+    function resetAll() {
+        stopProgression();
+        activeAnalyzerNotes.clear();
+        individuallyLitMarkers.clear();
+        currentChordTones = [];
+        currentChordNotes = new Set();
+        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
+        document.getElementById('chordTonesDisplay').style.display = 'none';
+        document.getElementById('chordTonesCircles').innerHTML     = '';
+        for (let s = 1; s <= 6; s++) {
+            for (let f = 0; f <= 24; f++) {
+                const m = document.getElementById(`marker-${s}-${f}`);
+                m.style.visibility      = 'hidden';
+                m.style.backgroundColor = '';
+                m.className             = 'target-marker';
+                m.querySelector('.note-text').innerText = '●';
+                m.querySelector('.octave').innerText    = '';
+            }
+        }
+        document.querySelectorAll('.choice-btn').forEach(b => {
+            b.className = 'choice-btn'; b.style.backgroundColor = ''; b.style.color = '';
+        });
+    }
 
     function getRomanNumeral(index, quality) {
         const base = romanNumeralsBase[index];
@@ -614,171 +834,33 @@
         if (quality === 'dim') return base.toLowerCase() + '°';
         return base;
     }
+    function disableAllChoiceButtons(d) { document.querySelectorAll('.choice-btn').forEach(b => b.disabled = d); }
+    function toggleCheckboxes(d)        { for (let s = 1; s <= 6; s++) document.getElementById(`chk-${s}`).disabled = d; }
 
-    const scaleIntervals = {
-        major: [0, 2, 4, 5, 7, 9, 11],
-        minor: [0, 2, 3, 5, 7, 8, 10],
-        majorPenta: [0, 2, 4, 7, 9],
-        minorPenta: [0, 3, 5, 7, 10]
-    };
-
-    const tuningPresets = {
-        regular: { 1: { n: "E", o: 4 }, 2: { n: "B", o: 3 }, 3: { n: "G", o: 3 }, 4: { n: "D", o: 3 }, 5: { n: "A", o: 2 }, 6: { n: "E", o: 2 } },
-        halfStepDown: { 1: { n: "D#/Eb", o: 4 }, 2: { n: "A#/Bb", o: 3 }, 3: { n: "F#/Gb", o: 3 }, 4: { n: "C#/Db", o: 3 }, 5: { n: "G#/Ab", o: 2 }, 6: { n: "D#/Eb", o: 2 } },
-        dropD: { 1: { n: "E", o: 4 }, 2: { n: "B", o: 3 }, 3: { n: "G", o: 3 }, 4: { n: "D", o: 3 }, 5: { n: "A", o: 2 }, 6: { n: "D", o: 2 } }
-    };
-
-    let boardData = {}; 
-    let currentMode = 'quiz';
-    let displayMode = 'note'; // 'note' or 'interval'
-    let maxFretRange = 12;
-    let currentString = 0;
-    let currentFret = 0;
-    let correctAnswer = "";
-    let isAnswered = false;
-    let activeAnalyzerNotes = new Set();
-    let individuallyLitMarkers = new Set();
-
-    let audioCtx = null;
-
-    function playGuitarNote(noteName, octave) {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-
-        const targetNote = noteName.split('/')[0]; 
-        const noteValues = { "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11 };
-        const keyNumber = noteValues[targetNote] + (octave * 12);
-        const a4KeyNumber = noteValues["A"] + (4 * 12); 
-        const frequency = 440 * Math.pow(2, (keyNumber - a4KeyNumber) / 12);
-        const masterVol = parseFloat(document.getElementById('volumeSlider').value);
-        if (masterVol === 0) return; 
-
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.value = frequency;
-        const now = audioCtx.currentTime;
-        gainNode.gain.setValueAtTime(masterVol, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2); 
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 1.2);
+    // =====================
+    // モード・設定切替
+    // =====================
+    function toggleMode() {
+        currentMode = (currentMode === 'quiz') ? 'analyzer' : 'quiz';
+        applyModeUI(currentMode);
+        resetAll();
+        if (currentMode === 'analyzer') document.getElementById('scaleSelect').value = 'none';
     }
 
-    function generateBoardData(tuningKey) {
-        const preset = tuningPresets[tuningKey];
-        boardData = {};
-        for (let s = 1; s <= 6; s++) {
-            boardData[s] = [];
-            const openNote = preset[s].n;
-            let currentOct = preset[s].o;
-            let pIdx = chromaticScale.indexOf(openNote);
-            for (let f = 0; f <= 24; f++) {
-                let noteName = chromaticScale[pIdx];
-                if (f > 0 && noteName === "C") currentOct++;
-                boardData[s].push({ n: noteName, o: currentOct });
-                pIdx = (pIdx + 1) % 12;
-            }
-        }
-    }
-
-    generateBoardData('regular');
-
-    const thead = document.getElementById('fretboard-head');
-    const trHead = document.createElement('tr');
-    trHead.innerHTML = '<th>弦 \\ F</th>';
-    for (let f = 0; f <= 24; f++) {
-        let classes = [];
-        if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
-        if (f === 12 || f === 24) classes.push('double-dot-fret');
-        if (f > 12) classes.push('extended-fret');
-        let clsAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : '';
-        trHead.innerHTML += `<th id="th-fret-${f}" ${clsAttr}>${f}</th>`;
-    }
-    thead.appendChild(trHead);
-
-    const tbody = document.getElementById('fretboard-body');
-    for (let s = 1; s <= 6; s++) {
-        const tr = document.createElement('tr');
-        tr.id = `string-${s}`;
-        tr.innerHTML = `<td id="string-label-${s}">${s}弦</td>`;
-        for (let f = 0; f <= 24; f++) {
-            const td = document.createElement('td');
-            let classes = ['fret-cell'];
-            if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
-            if (f === 12 || f === 24) classes.push('double-dot-fret');
-            if (f > 12) classes.push('extended-fret');
-            td.className = classes.join(' ');
-            td.id = `td-${s}-${f}`;
-            td.onclick = () => handleFretCellClick(s, f);
-            td.innerHTML = `<span class="target-marker" id="marker-${s}-${f}"><span class="note-text">●</span><span class="octave"></span></span>`;
-            tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-    }
-
-    const grid = document.getElementById('choicesGrid');
-    allNotes.forEach(note => {
-        const btn = document.createElement('button');
-        btn.className = 'choice-btn';
-        btn.id = `btn-${note.replace('/', '-')}`;
-        btn.innerText = note;
-        btn.disabled = true;
-        btn.onclick = () => handleNoteClick(note, btn);
-        grid.appendChild(btn);
-    });
-
-    /* ================= 新機能：表示モードのトグル ================= */
-    function toggleDisplayMode() {
-        displayMode = (displayMode === 'note') ? 'interval' : 'note';
-        const btn = document.getElementById('displayToggleBtn');
-        
-        if (displayMode === 'note') {
-            btn.innerText = '表示: 音名';
-            btn.classList.remove('active');
+    function switchRange(range) {
+        maxFretRange = range;
+        document.getElementById('range-12').classList.toggle('active', range === 12);
+        document.getElementById('range-24').classList.toggle('active', range === 24);
+        document.querySelectorAll('.extended-fret').forEach(el =>
+            el.style.display = (range === 24) ? 'table-cell' : 'none'
+        );
+        resetAll();
+        if (currentMode === 'quiz') {
+            document.getElementById('displayContent').innerText    = '「スタート」を押してね';
+            document.getElementById('actionBtn').style.visibility = 'visible';
+            disableAllChoiceButtons(true);
         } else {
-            btn.innerText = '表示: 度数';
-            btn.classList.add('active');
-        }
-
-        // 表示を即座に更新
-        if (currentMode === 'analyzer') {
-            updateAnalyzerMarkers();
-            if (currentChordTones.length > 0) renderChordToneCircles();
-        } else if (isAnswered) {
-            // クイズ解答後であればクイズのマーカーも更新
-            const marker = document.getElementById(`marker-${currentString}-${currentFret}`);
-            const data = boardData[currentString][currentFret];
-            updateMarkerContent(marker, data);
-        }
-    }
-
-    // マーカーの中身（テキストとルート強調）を更新する共通関数
-    function updateMarkerContent(marker, data) {
-        const key = document.getElementById('keySelect').value;
-        
-        if (displayMode === 'interval') {
-            // 度数表示ロジック
-            const rootIdx = chromaticScale.indexOf(key);
-            const noteIdx = chromaticScale.indexOf(data.n);
-            const semiSteps = (noteIdx - rootIdx + 12) % 12;
-            const intervalName = intervalMap[semiSteps];
-            
-            marker.querySelector('.note-text').innerText = intervalName;
-            marker.querySelector('.octave').innerText = ''; // 度数モードではオクターブは隠す（見やすさ優先）
-            
-            // ルート音 (R) の場合は特別色にする
-            if (intervalName === "R") {
-                marker.classList.add('root-note');
-            } else {
-                marker.classList.remove('root-note');
-            }
-        } else {
-            // 音名表示ロジック
-            marker.querySelector('.note-text').innerText = data.n;
-            marker.querySelector('.octave').innerText = data.o;
-            marker.classList.remove('root-note');
+            applyScaleSelection();
         }
     }
 
@@ -786,310 +868,42 @@
         generateBoardData(document.getElementById('tuningSelect').value);
         resetAll();
         if (currentMode === 'quiz') {
-            document.getElementById('displayContent').innerText = '「スタート」を押してね';
-            disableAllChoiceButtons(true);
+            document.getElementById('displayContent').innerText    = '「スタート」を押してね';
             document.getElementById('actionBtn').style.visibility = 'visible';
-            document.getElementById('actionBtn').innerText = 'スタート';
+            document.getElementById('actionBtn').innerText        = 'スタート';
+            disableAllChoiceButtons(true);
         } else {
             applyScaleSelection();
         }
     }
 
-    function toggleMode() {
-        currentMode = (currentMode === 'quiz') ? 'analyzer' : 'quiz';
-        const toggleBtn = document.getElementById('modeToggleBtn');
-        if (currentMode === 'quiz') {
-            document.body.className = 'mode-quiz';
-            toggleBtn.innerText = 'アナライザーへ';
-            document.getElementById('settingsPanel').style.display = 'block';
-            document.getElementById('scalePanel').style.display = 'none';
-            document.getElementById('controlWrapper').style.display = 'block';
-            document.getElementById('displayContent').className = 'question';
-            document.getElementById('displayContent').innerText = '「スタート」を押してね';
-            document.getElementById('chordGrid').style.display = 'none';
-            document.getElementById('chordTonesDisplay').style.display = 'none';
-            document.getElementById('choicesGrid').style.display = 'grid';
-            disableAllChoiceButtons(true);
-        } else {
-            document.body.className = 'mode-analyzer';
-            toggleBtn.innerText = 'クイズモードへ';
-            document.getElementById('settingsPanel').style.display = 'none';
-            document.getElementById('scalePanel').style.display = 'block';
-            document.getElementById('controlWrapper').style.display = 'none';
-            document.getElementById('displayContent').className = 'analyzer-instruction';
-            document.getElementById('displayContent').innerText = '指板を直接押すか、スケールを選んでダイアトニックコードを確認しましょう';
-            disableAllChoiceButtons(false);
-            document.getElementById('scaleSelect').value = 'none';
-        }
-        resetAll();
-    }
-
-    function switchRange(range) {
-        maxFretRange = range;
-        document.getElementById('range-12').classList.toggle('active', range === 12);
-        document.getElementById('range-24').classList.toggle('active', range === 24);
-        const extendedElements = document.querySelectorAll('.extended-fret');
-        extendedElements.forEach(el => el.style.display = (range === 24) ? 'table-cell' : 'none');
-        resetAll();
-        if (currentMode === 'quiz') {
-            document.getElementById('displayContent').innerText = '「スタート」を押してね';
-            disableAllChoiceButtons(true);
-            document.getElementById('actionBtn').style.visibility = 'visible';
-        } else {
-            applyScaleSelection();
-        }
-    }
-
-    function handleNoteClick(note, btn) {
-        if (currentMode === 'quiz') checkAnswer(note, btn);
-        else toggleAnalyzerNote(note, btn);
-    }
-
-    function applyScaleSelection() {
-        if (currentMode !== 'analyzer') return;
-        const key = document.getElementById('keySelect').value;
-        const scaleType = document.getElementById('scaleSelect').value;
-        activeAnalyzerNotes.clear();
-        individuallyLitMarkers.clear();
-        allNotes.forEach(n => {
-            const b = document.getElementById(`btn-${n.replace('/', '-')}`);
-            b.style.backgroundColor = ''; b.style.borderColor = ''; b.style.color = '';
-        });
-
-        // コードグリッドとコード構成音表示をリセット
-        document.getElementById('chordGrid').style.display = 'none';
-        document.getElementById('chordTonesDisplay').style.display = 'none';
-        document.getElementById('chordGrid').innerHTML = '';
-        document.getElementById('choicesGrid').style.display = 'grid';
-
-        if (scaleType !== 'none') {
-            const intervals = scaleIntervals[scaleType];
-            const startIdx = chromaticScale.indexOf(key);
-            intervals.forEach(interval => {
-                const noteName = chromaticScale[(startIdx + interval) % 12];
-                activeAnalyzerNotes.add(noteName);
-                const btn = document.getElementById(`btn-${noteName.replace('/', '-')}`);
-                if (btn) { btn.style.backgroundColor = noteColors[noteName]; btn.style.color = 'white'; }
-            });
-            // アルペジオ再生
-            let delay = 0;
-            for (let s = 6; s >= 1; s--) {
-                for (let f = 0; f <= maxFretRange; f++) {
-                    if (activeAnalyzerNotes.has(boardData[s][f].n)) {
-                        setTimeout(() => playGuitarNote(boardData[s][f].n, boardData[s][f].o), delay);
-                        delay += 60; break;
-                    }
-                }
-            }
-
-            // ダイアトニックコードボタンを生成（major/minorのみ）
-            if (diatonicChordQualities[scaleType]) {
-                const qualities = diatonicChordQualities[scaleType];
-                const chordGrid = document.getElementById('chordGrid');
-                chordGrid.style.display = 'grid';
-                document.getElementById('choicesGrid').style.display = 'none';
-
-                qualities.forEach((quality, i) => {
-                    const rootNote = chromaticScale[(startIdx + intervals[i]) % 12];
-                    const roman = getRomanNumeral(i, quality);
-                    const qualityLabel = quality === 'maj' ? 'Maj' : quality === 'min' ? 'min' : 'dim';
-
-                    const btn = document.createElement('button');
-                    btn.className = 'chord-btn';
-                    btn.id = `chord-btn-${i}`;
-                    btn.innerHTML = `<span class="roman">${roman}</span><span class="chord-quality">${rootNote} ${qualityLabel}</span>`;
-                    btn.onclick = () => { stopProgression(); handleChordClick(i, rootNote, quality, roman); };
-                    chordGrid.appendChild(btn);
-                });
-
-                // コード進行プレイヤーパネルを生成
-                const progressions = progressionData[scaleType] || [];
-                const panel = document.getElementById('progressionPanel');
-                const btnsEl = document.getElementById('progressionBtns');
-                btnsEl.innerHTML = '';
-                document.getElementById('progressionSequence').innerHTML = '';
-                progressions.forEach(prog => {
-                    const btn = document.createElement('button');
-                    btn.className = 'progression-btn';
-                    btn.dataset.name = prog.name;
-                    btn.innerText = prog.name;
-                    btn.onclick = () => playProgression(prog.name, prog.degrees, scaleType);
-                    btnsEl.appendChild(btn);
-                });
-                panel.style.display = 'flex';
-            } else {
-                document.getElementById('progressionPanel').style.display = 'none';
-            }
-        }
-        updateAnalyzerMarkers();
-    }
-
-    const progressionData = {
-        major: [
-            { name: 'カノン',    degrees: [1,5,6,3,4,1,4,5] },
-            { name: '王道',      degrees: [4,5,3,6] },
-            { name: 'ii-V-I',   degrees: [2,5,1] },
-            { name: 'I-IV-V',   degrees: [1,4,5] },
-            { name: 'I-V-vi-IV', degrees: [1,5,6,4] },
-        ],
-        minor: [
-            { name: '小室',      degrees: [1,7,6,7] },
-            { name: 'i-VII-VI-V', degrees: [1,7,6,5] },
-            { name: 'i-iv-VII',  degrees: [1,4,7] },
-            { name: 'i-VI-III-VII', degrees: [1,6,3,7] },
-        ],
-    };
-
-    let progressionTimers = [];
-    let isProgressionPlaying = false;
-
-    let currentChordTones = [];
-    let currentChordNotes = new Set();
-
-    function playProgression(progName, degrees, scaleType) {
-        stopProgression();
-        isProgressionPlaying = true;
-
-        const key = document.getElementById('keySelect').value;
-        const startIdx = chromaticScale.indexOf(key);
-        const intervals = scaleIntervals[scaleType];
-        const qualities = diatonicChordQualities[scaleType];
-
-        // ローマ数字シーケンスを表示
-        const seqEl = document.getElementById('progressionSequence');
-        seqEl.innerHTML = degrees.map((d, i) => {
-            const q = qualities[d - 1];
-            const roman = getRomanNumeral(d - 1, q);
-            return `<span class="step" id="prog-step-${i}">${roman}</span>`;
-        }).join(' → ');
-
-        document.getElementById('progressionStopBtn').style.display = 'inline-block';
-        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
-        document.querySelector(`.progression-btn[data-name="${progName}"]`).classList.add('playing');
-
-        const msPerChord = 1600;
-        degrees.forEach((degree, i) => {
-            const t = setTimeout(() => {
-                if (!isProgressionPlaying) return;
-                // ステップ強調
-                document.querySelectorAll('.prog-step-highlight').forEach(s => s.classList.remove('current-step'));
-                const stepEl = document.getElementById(`prog-step-${i}`);
-                if (stepEl) stepEl.classList.add('current-step');
-
-                const chordIdx = degree - 1;
-                const rootNote = chromaticScale[(startIdx + intervals[chordIdx]) % 12];
-                const quality = qualities[chordIdx];
-                const roman = getRomanNumeral(chordIdx, quality);
-                handleChordClick(chordIdx, rootNote, quality, roman);
-            }, i * msPerChord);
-            progressionTimers.push(t);
-        });
-
-        // 終了処理
-        const endTimer = setTimeout(() => stopProgression(), degrees.length * msPerChord + 200);
-        progressionTimers.push(endTimer);
-    }
-
-    function stopProgression() {
-        progressionTimers.forEach(t => clearTimeout(t));
-        progressionTimers = [];
-        isProgressionPlaying = false;
-        document.getElementById('progressionStopBtn').style.display = 'none';
-        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
-        document.querySelectorAll('#progressionSequence .step').forEach(s => s.classList.remove('current-step'));
-    }
-
-    function handleChordClick(index, rootNote, quality, roman) {
-        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
-        document.getElementById(`chord-btn-${index}`).classList.add('active-chord');
-
-        const rootIdx = chromaticScale.indexOf(rootNote);
-
-        // アルペジオ再生（低弦側から近いオクターブで順番に鳴らす）
-        const tonesForSound = chordIntervalMap[quality].map(interval =>
-            chromaticScale[(rootIdx + interval) % 12]
-        );
-        tonesForSound.forEach((note, i) => {
-            const oct = (note === 'C' && i > 0) ? 4 : (chromaticScale.indexOf(note) < 4 ? 3 : 3);
-            setTimeout(() => playGuitarNote(note, oct), i * 80);
-        });
-
-        currentChordTones = chordIntervalMap[quality].map((interval, i) => ({
-            note: chromaticScale[(rootIdx + interval) % 12],
-            isRoot: i === 0
-        }));
-        currentChordNotes = new Set(currentChordTones.map(t => t.note));
-
-        const display = document.getElementById('chordTonesDisplay');
-        display.style.display = 'flex';
-        document.getElementById('chordTonesLabel').innerText = `${roman}  (${rootNote} ${quality === 'maj' ? 'Major' : quality === 'min' ? 'minor' : 'dim'})`;
-        renderChordToneCircles();
-        updateAnalyzerMarkers();
-    }
-
-    function renderChordToneCircles() {
-        const container = document.getElementById('chordTonesCircles');
-        container.innerHTML = '';
-        const key = document.getElementById('keySelect').value;
-        const keyRootIdx = chromaticScale.indexOf(key);
-
-        currentChordTones.forEach((tone, i) => {
-            if (i > 0) {
-                const slash = document.createElement('span');
-                slash.className = 'chord-tone-slash';
-                slash.innerText = '/';
-                container.appendChild(slash);
-            }
-
-            const circle = document.createElement('span');
-            circle.className = 'chord-tone-marker' + (tone.isRoot ? ' root-note' : '');
-            circle.style.backgroundColor = noteColors[tone.note];
-
-            let label;
-            if (displayMode === 'interval') {
-                const noteIdx = chromaticScale.indexOf(tone.note);
-                const semiSteps = (noteIdx - keyRootIdx + 12) % 12;
-                label = intervalMap[semiSteps];
-            } else {
-                label = tone.note;
-            }
-
-            circle.innerHTML = `<span class="tone-text">${label}</span>`;
-            container.appendChild(circle);
-        });
-    }
-
-    function handleFretCellClick(string, fret) {
-        if (currentMode !== 'analyzer') return;
-        const key = `${string}-${fret}`;
-        if (individuallyLitMarkers.has(key)) individuallyLitMarkers.delete(key);
-        else {
-            individuallyLitMarkers.add(key);
-            playGuitarNote(boardData[string][fret].n, boardData[string][fret].o);
-        }
-        updateAnalyzerMarkers();
-    }
-
+    // =====================
+    // クイズモード
+    // =====================
     function nextQuestion() {
         const selected = [];
         for (let s = 1; s <= 6; s++) if (document.getElementById(`chk-${s}`).checked) selected.push(s);
         if (selected.length === 0) return alert("弦を選んでください");
-        isAnswered = false; resetAll();
+        isAnswered = false;
+        resetAll();
         currentString = selected[Math.floor(Math.random() * selected.length)];
-        currentFret = Math.floor(Math.random() * (maxFretRange + 1));
+        currentFret   = Math.floor(Math.random() * (maxFretRange + 1));
         correctAnswer = boardData[currentString][currentFret].n;
-        document.getElementById('displayContent').innerText = `${currentString}弦 ${currentFret}フレット`;
-        const m = document.getElementById(`marker-${currentString}-${currentFret}`);
-        m.style.backgroundColor = '#0071e3'; m.classList.add('visible-on');
-        toggleCheckboxes(true); disableAllChoiceButtons(false);
+        document.getElementById('displayContent').innerText    = `${currentString}弦 ${currentFret}フレット`;
         document.getElementById('actionBtn').style.visibility = 'hidden';
+        const m = document.getElementById(`marker-${currentString}-${currentFret}`);
+        m.style.backgroundColor = '#0071e3';
+        m.classList.add('visible-on');
+        toggleCheckboxes(true);
+        disableAllChoiceButtons(false);
     }
 
     function checkAnswer(selected, btn) {
         if (isAnswered) return;
         if (selected === correctAnswer) {
-            isAnswered = true; btn.classList.add('correct');
-            const m = document.getElementById(`marker-${currentString}-${currentFret}`);
+            isAnswered = true;
+            btn.classList.add('correct');
+            const m    = document.getElementById(`marker-${currentString}-${currentFret}`);
             const data = boardData[currentString][currentFret];
             m.style.backgroundColor = noteColors[data.n];
             updateMarkerContent(m, data);
@@ -1097,22 +911,162 @@
             playGuitarNote(data.n, data.o);
             disableAllChoiceButtons(true);
             document.getElementById('actionBtn').style.visibility = 'visible';
-            document.getElementById('actionBtn').innerText = '次の問題';
+            document.getElementById('actionBtn').innerText        = '次の問題';
             toggleCheckboxes(false);
         } else {
-            btn.classList.add('wrong'); btn.disabled = true;
+            btn.classList.add('wrong');
+            btn.disabled = true;
         }
+    }
+
+    // =====================
+    // アナライザーモード
+    // =====================
+    function handleNoteClick(note, btn) {
+        if (currentMode === 'quiz') checkAnswer(note, btn);
+        else toggleAnalyzerNote(note, btn);
+    }
+
+    function applyScaleSelection() {
+        if (currentMode !== 'analyzer') return;
+        const key       = document.getElementById('keySelect').value;
+        const scaleType = document.getElementById('scaleSelect').value;
+
+        // 状態・UIをリセット
+        activeAnalyzerNotes.clear();
+        individuallyLitMarkers.clear();
+        allNotes.forEach(n => {
+            const b = document.getElementById(`btn-${n.replace('/', '-')}`);
+            b.style.backgroundColor = ''; b.style.color = '';
+        });
+        document.getElementById('chordGrid').style.display         = 'none';
+        document.getElementById('chordGrid').innerHTML             = '';
+        document.getElementById('chordTonesDisplay').style.display  = 'none';
+        document.getElementById('progressionPanel').style.display   = 'none';
+        document.getElementById('choicesGrid').style.display       = 'grid';
+
+        if (scaleType === 'none') { updateAnalyzerMarkers(); return; }
+
+        // スケール音の収集とボタン着色
+        const intervals = scaleIntervals[scaleType];
+        const startIdx  = chromaticScale.indexOf(key);
+        intervals.forEach(interval => {
+            const noteName = chromaticScale[(startIdx + interval) % 12];
+            activeAnalyzerNotes.add(noteName);
+            const btn = document.getElementById(`btn-${noteName.replace('/', '-')}`);
+            if (btn) { btn.style.backgroundColor = noteColors[noteName]; btn.style.color = 'white'; }
+        });
+
+        // スケールアルペジオ再生
+        let delay = 0;
+        for (let s = 6; s >= 1; s--) {
+            for (let f = 0; f <= maxFretRange; f++) {
+                if (activeAnalyzerNotes.has(boardData[s][f].n)) {
+                    setTimeout(() => playGuitarNote(boardData[s][f].n, boardData[s][f].o), delay);
+                    delay += 60; break;
+                }
+            }
+        }
+
+        if (diatonicChordQualities[scaleType]) {
+            buildChordButtons(scaleType, startIdx, intervals);
+            buildProgressionPanel(scaleType);
+        }
+
+        updateAnalyzerMarkers();
+    }
+
+    function buildChordButtons(scaleType, startIdx, intervals) {
+        const qualities = diatonicChordQualities[scaleType];
+        const chordGrid = document.getElementById('chordGrid');
+        chordGrid.style.display = 'grid';
+        document.getElementById('choicesGrid').style.display = 'none';
+
+        qualities.forEach((quality, i) => {
+            const rootNote     = chromaticScale[(startIdx + intervals[i]) % 12];
+            const roman        = getRomanNumeral(i, quality);
+            const qualityLabel = { maj: 'Maj', min: 'min', dim: 'dim' }[quality];
+            const btn          = document.createElement('button');
+            btn.className = 'chord-btn';
+            btn.id        = `chord-btn-${i}`;
+            btn.innerHTML = `<span class="roman">${roman}</span><span class="chord-quality">${rootNote} ${qualityLabel}</span>`;
+            btn.onclick   = () => { stopProgression(); handleChordClick(i, rootNote, quality, roman); };
+            chordGrid.appendChild(btn);
+        });
+    }
+
+    function buildProgressionPanel(scaleType) {
+        const btnsEl = document.getElementById('progressionBtns');
+        btnsEl.innerHTML = '';
+        document.getElementById('progressionSequence').innerHTML = '';
+        (progressionData[scaleType] || []).forEach(prog => {
+            const btn        = document.createElement('button');
+            btn.className    = 'progression-btn';
+            btn.dataset.name = prog.name;
+            btn.innerText    = prog.name;
+            btn.onclick      = () => playProgression(prog.name, prog.degrees, scaleType);
+            btnsEl.appendChild(btn);
+        });
+        document.getElementById('progressionPanel').style.display = 'flex';
+    }
+
+    function handleChordClick(index, rootNote, quality, roman) {
+        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
+        document.getElementById(`chord-btn-${index}`).classList.add('active-chord');
+
+        const rootIdx = chromaticScale.indexOf(rootNote);
+        chordIntervalMap[quality].forEach((interval, i) => {
+            const note = chromaticScale[(rootIdx + interval) % 12];
+            setTimeout(() => playGuitarNote(note, 3), i * 80);
+        });
+
+        currentChordTones = chordIntervalMap[quality].map((interval, i) => ({
+            note: chromaticScale[(rootIdx + interval) % 12], isRoot: i === 0
+        }));
+        currentChordNotes = new Set(currentChordTones.map(t => t.note));
+
+        document.getElementById('chordTonesDisplay').style.display = 'flex';
+        document.getElementById('chordTonesLabel').innerText =
+            `${roman}  (${rootNote} ${{ maj: 'Major', min: 'minor', dim: 'dim' }[quality]})`;
+        renderChordToneCircles();
+        updateAnalyzerMarkers();
+    }
+
+    function renderChordToneCircles() {
+        const container  = document.getElementById('chordTonesCircles');
+        container.innerHTML = '';
+        const keyRootIdx = chromaticScale.indexOf(document.getElementById('keySelect').value);
+
+        currentChordTones.forEach((tone, i) => {
+            if (i > 0) {
+                const slash     = document.createElement('span');
+                slash.className = 'chord-tone-slash';
+                slash.innerText = '/';
+                container.appendChild(slash);
+            }
+            const circle                  = document.createElement('span');
+            circle.className              = 'chord-tone-marker' + (tone.isRoot ? ' root-note' : '');
+            circle.style.backgroundColor  = noteColors[tone.note];
+            const steps                   = (chromaticScale.indexOf(tone.note) - keyRootIdx + 12) % 12;
+            const label                   = displayMode === 'interval' ? intervalMap[steps] : tone.note;
+            circle.innerHTML              = `<span class="tone-text">${label}</span>`;
+            container.appendChild(circle);
+        });
     }
 
     function toggleAnalyzerNote(note, btn) {
         if (activeAnalyzerNotes.has(note)) {
             activeAnalyzerNotes.delete(note);
             btn.style.backgroundColor = ''; btn.style.color = '';
-            for (let s = 1; s <= 6; s++) for (let f = 0; f <= 24; f++) if (boardData[s][f].n === note) individuallyLitMarkers.delete(`${s}-${f}`);
+            for (let s = 1; s <= 6; s++)
+                for (let f = 0; f <= 24; f++)
+                    if (boardData[s][f].n === note) individuallyLitMarkers.delete(`${s}-${f}`);
         } else {
             activeAnalyzerNotes.add(note);
             btn.style.backgroundColor = noteColors[note]; btn.style.color = 'white';
-            for (let s = 1; s <= 6; s++) for (let f = 0; f <= maxFretRange; f++) if (boardData[s][f].n === note) playGuitarNote(boardData[s][f].n, boardData[s][f].o);
+            for (let s = 1; s <= 6; s++)
+                for (let f = 0; f <= maxFretRange; f++)
+                    if (boardData[s][f].n === note) playGuitarNote(boardData[s][f].n, boardData[s][f].o);
         }
         updateAnalyzerMarkers();
     }
@@ -1126,44 +1080,71 @@
                     updateMarkerContent(m, d);
                     m.style.backgroundColor = noteColors[d.n];
                     m.classList.add('visible-on');
-                    if (currentChordNotes.size > 0 && !currentChordNotes.has(d.n)) {
-                        m.classList.add('dimmed');
-                    } else {
-                        m.classList.remove('dimmed');
-                    }
+                    m.classList.toggle('dimmed', currentChordNotes.size > 0 && !currentChordNotes.has(d.n));
                 } else {
-                    m.style.backgroundColor = ''; m.classList.remove('visible-on', 'root-note', 'dimmed');
+                    m.style.backgroundColor = '';
+                    m.classList.remove('visible-on', 'root-note', 'dimmed');
                     m.querySelector('.note-text').innerText = '●';
-                    m.querySelector('.octave').innerText = '';
+                    m.querySelector('.octave').innerText    = '';
                 }
             }
         }
     }
 
-    function resetAll() {
-        activeAnalyzerNotes.clear(); individuallyLitMarkers.clear();
-        stopProgression();
-        currentChordTones = [];
-        currentChordNotes = new Set();
-        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
-        document.getElementById('chordTonesDisplay').style.display = 'none';
-        document.getElementById('chordTonesCircles').innerHTML = '';
-        for (let s = 1; s <= 6; s++) {
-            for (let f = 0; f <= 24; f++) {
-                const m = document.getElementById(`marker-${s}-${f}`);
-                m.style.visibility = 'hidden'; m.style.backgroundColor = '';
-                m.className = 'target-marker';
-                m.querySelector('.note-text').innerText = '●';
-                m.querySelector('.octave').innerText = '';
-            }
+    function handleFretCellClick(string, fret) {
+        if (currentMode !== 'analyzer') return;
+        const key = `${string}-${fret}`;
+        if (individuallyLitMarkers.has(key)) individuallyLitMarkers.delete(key);
+        else {
+            individuallyLitMarkers.add(key);
+            playGuitarNote(boardData[string][fret].n, boardData[string][fret].o);
         }
-        document.querySelectorAll('.choice-btn').forEach(b => {
-            b.className = 'choice-btn'; b.style.backgroundColor = ''; b.style.color = '';
-        });
+        updateAnalyzerMarkers();
     }
 
-    function disableAllChoiceButtons(d) { document.querySelectorAll('.choice-btn').forEach(b => b.disabled = d); }
-    function toggleCheckboxes(d) { for (let s = 1; s <= 6; s++) document.getElementById(`chk-${s}`).disabled = d; }
+    // =====================
+    // 進行プレイヤー
+    // =====================
+    function playProgression(progName, degrees, scaleType) {
+        stopProgression();
+        isProgressionPlaying = true;
+
+        const key       = document.getElementById('keySelect').value;
+        const startIdx  = chromaticScale.indexOf(key);
+        const intervals = scaleIntervals[scaleType];
+        const qualities = diatonicChordQualities[scaleType];
+
+        document.getElementById('progressionSequence').innerHTML = degrees.map((d, i) =>
+            `<span class="step" id="prog-step-${i}">${getRomanNumeral(d - 1, qualities[d - 1])}</span>`
+        ).join(' → ');
+
+        document.getElementById('progressionStopBtn').style.display = 'inline-block';
+        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
+        document.querySelector(`.progression-btn[data-name="${progName}"]`).classList.add('playing');
+
+        const msPerChord = 1600;
+        degrees.forEach((degree, i) => {
+            progressionTimers.push(setTimeout(() => {
+                if (!isProgressionPlaying) return;
+                document.querySelectorAll('#progressionSequence .step').forEach(s => s.classList.remove('current-step'));
+                document.getElementById(`prog-step-${i}`)?.classList.add('current-step');
+                const idx      = degree - 1;
+                const rootNote = chromaticScale[(startIdx + intervals[idx]) % 12];
+                const quality  = qualities[idx];
+                handleChordClick(idx, rootNote, quality, getRomanNumeral(idx, quality));
+            }, i * msPerChord));
+        });
+        progressionTimers.push(setTimeout(() => stopProgression(), degrees.length * msPerChord + 200));
+    }
+
+    function stopProgression() {
+        progressionTimers.forEach(t => clearTimeout(t));
+        progressionTimers    = [];
+        isProgressionPlaying = false;
+        document.getElementById('progressionStopBtn').style.display = 'none';
+        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
+        document.querySelectorAll('#progressionSequence .step').forEach(s => s.classList.remove('current-step'));
+    }
 </script>
 
 </body>
