@@ -108,8 +108,8 @@
             color: white;
         }
 
-        /* チューニングセレクト */
-        .select-tuning {
+        /* チューニング・スケールセレクト */
+        .select-custom {
             padding: 6px 12px;
             font-size: 0.85rem;
             font-weight: bold;
@@ -121,7 +121,16 @@
             outline: none;
         }
 
-        /* 出題範囲設定パネル */
+        /* スケールセレクトパネル（アナライザー用） */
+        .scale-panel {
+            display: none; /* 初期（クイズモード）は非表示 */
+            background-color: #f0f7ff;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #b3d7ff;
+        }
+
+        /* 出題範囲設定パネル（クイズ用） */
         .settings-panel {
             background-color: #f5f5f7;
             border-radius: 10px;
@@ -328,7 +337,7 @@
             <button id="range-24" class="switch-btn" onclick="switchRange(24)">24 フレット</button>
 
             <span style="font-size: 0.85rem; font-weight: bold; color: #555; margin-left: 10px;">チューニング:</span>
-            <select id="tuningSelect" class="select-tuning" onchange="handleTuningChange()">
+            <select id="tuningSelect" class="select-custom" onchange="handleTuningChange()">
                 <option value="regular">Regular (1E, 2B, 3G, 4D, 5A, 6E)</option>
                 <option value="halfStepDown">Half Step Down (1Eb, 2Bb, 3Gb, 4Db, 5Ab, 6Eb)</option>
                 <option value="dropD">Drop D (1E, 2B, 3G, 4D, 5A, 6D)</option>
@@ -344,6 +353,28 @@
                 <label class="checkbox-label"><input type="checkbox" id="chk-4" value="4"> 4弦</label>
                 <label class="checkbox-label"><input type="checkbox" id="chk-5" value="5" checked> 5弦</label>
                 <label class="checkbox-label"><input type="checkbox" id="chk-6" value="6" checked> 6弦</label>
+            </div>
+        </div>
+
+        <div class="scale-panel" id="scalePanel">
+            <div class="settings-title" style="color: #004b93;">演奏スケール一発ナビ</div>
+            <div class="row-group">
+                <span style="font-size: 0.85rem; font-weight: bold; color: #333;">Key:</span>
+                <select id="keySelect" class="select-custom" onchange="applyScaleSelection()">
+                    <option value="C">C</option><option value="C#/Db">C# / Db</option><option value="D">D</option>
+                    <option value="D#/Eb">D# / Eb</option><option value="E">E</option><option value="F">F</option>
+                    <option value="F#/Gb">F# / Gb</option><option value="G">G</option><option value="G#/Ab">G# / Ab</option>
+                    <option value="A">A</option><option value="A#/Bb">A# / Bb</option><option value="B">B</option>
+                </select>
+
+                <span style="font-size: 0.85rem; font-weight: bold; color: #333; margin-left: 10px;">Scale:</span>
+                <select id="scaleSelect" class="select-custom" onchange="applyScaleSelection()">
+                    <option value="none">-- 選択解除 --</option>
+                    <option value="major">Major Scale (1, 2, 3, 4, 5, 6, 7)</option>
+                    <option value="minor">Natural Minor Scale (1, 2, b3, 4, 5, b6, b7)</option>
+                    <option value="majorPenta">Major Pentatonic (1, 2, 3, 5, 6)</option>
+                    <option value="minorPenta">Minor Pentatonic (1, b3, 4, 5, b7)</option>
+                </select>
             </div>
         </div>
     </div>
@@ -379,6 +410,14 @@
         "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
     };
 
+    // スケールの音程インターバル（半音のステップ数）定義（新機能データ）
+    const scaleIntervals = {
+        major: [0, 2, 4, 5, 7, 9, 11],
+        minor: [0, 2, 3, 5, 7, 8, 10],
+        majorPenta: [0, 2, 4, 7, 9],
+        minorPenta: [0, 3, 5, 7, 10]
+    };
+
     const tuningPresets = {
         regular: { 1: { n: "E", o: 4 }, 2: { n: "B", o: 3 }, 3: { n: "G", o: 3 }, 4: { n: "D", o: 3 }, 5: { n: "A", o: 2 }, 6: { n: "E", o: 2 } },
         halfStepDown: { 1: { n: "D#/Eb", o: 4 }, 2: { n: "A#/Bb", o: 3 }, 3: { n: "F#/Gb", o: 3 }, 4: { n: "C#/Db", o: 3 }, 5: { n: "G#/Ab", o: 2 }, 6: { n: "D#/Eb", o: 2 } },
@@ -395,12 +434,9 @@
     let activeAnalyzerNotes = new Set();
     let individuallyLitMarkers = new Set();
 
-    // Web Audio API 用のコンテキスト変数
     let audioCtx = null;
 
-    // --- [音源ロジック] 音名とオクターブから周波数を計算して鳴らす ---
     function playGuitarNote(noteName, octave) {
-        // ユーザーがブラウザを操作した後にオーディオコンテキストを初期化（ブラウザのセキュリティ制限回避）
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
@@ -408,38 +444,29 @@
             audioCtx.resume();
         }
 
-        // A4 = 440Hz を基準とした12平均律の計算
-        const targetNote = noteName.split('/')[0]; // "A#/Bb" の場合は "A#" を使用
+        const targetNote = noteName.split('/')[0]; 
         const noteValues = { "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11 };
         
         const keyNumber = noteValues[targetNote] + (octave * 12);
-        const a4KeyNumber = noteValues["A"] + (4 * 12); // 57
-        
-        // 周波数算出の公式: 440 * 2^((n - 57) / 12)
+        const a4KeyNumber = noteValues["A"] + (4 * 12); 
         const frequency = 440 * Math.pow(2, (keyNumber - a4KeyNumber) / 12);
 
-        // 音量コントロール
         const masterVol = parseFloat(document.getElementById('volumeSlider').value);
-        if (masterVol === 0) return; // ミュート時は処理スキップ
+        if (masterVol === 0) return; 
 
-        // オシレーター（発振器）とゲイン（音量）ノードの生成
         const osc = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
 
-        // ギターに近い、少し角のある「三角波(triangle)」を採用（サイン波より音程が聞き取りやすい）
         osc.type = 'triangle';
         osc.frequency.value = frequency;
 
-        // 音のエンベロープ（アタックと減衰）の設定。ギターっぽくポーンと減衰させる
         const now = audioCtx.currentTime;
         gainNode.gain.setValueAtTime(masterVol, now);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2); // 1.2秒かけて消音
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2); 
 
-        // ルーティング: 信号を発振器 -> 音量調整 -> スピーカーへ
         osc.connect(gainNode);
         gainNode.connect(audioCtx.destination);
 
-        // 再生と自動停止
         osc.start(now);
         osc.stop(now + 1.2);
     }
@@ -532,6 +559,9 @@
             disableAllChoiceButtons(true);
             document.getElementById('actionBtn').style.visibility = 'visible';
             document.getElementById('actionBtn').innerText = 'スタート';
+        } else {
+            // アナライザー中にチューニングを変えたら、現在のスケール選択を再適用
+            applyScaleSelection();
         }
     }
 
@@ -544,6 +574,7 @@
             document.body.className = 'mode-quiz';
             toggleBtn.innerText = 'アナライザーへ';
             document.getElementById('settingsPanel').style.display = 'block';
+            document.getElementById('scalePanel').style.display = 'none'; // スケールを隠す
             document.getElementById('controlWrapper').style.display = 'block';
             document.getElementById('displayContent').className = 'question';
             document.getElementById('displayContent').innerText = '「スタート」を押してね';
@@ -552,10 +583,15 @@
             document.body.className = 'mode-analyzer';
             toggleBtn.innerText = 'クイズモードへ';
             document.getElementById('settingsPanel').style.display = 'none';
+            document.getElementById('scalePanel').style.display = 'block'; // スケールを出す
             document.getElementById('controlWrapper').style.display = 'none';
             document.getElementById('displayContent').className = 'analyzer-instruction';
-            document.getElementById('displayContent').innerText = '指板のマスを直接押すか、下のボタンで対応する音名を全点灯できます（音が出ます）';
+            document.getElementById('displayContent').innerText = '指板のマスを直接押すか、下のボタンや上のスケールセレクトで音を一斉点灯できます';
             disableAllChoiceButtons(false);
+            
+            // アナライザーに入った段階でセレクトボックスを初期値にリセット
+            document.getElementById('keySelect').value = 'C';
+            document.getElementById('scaleSelect').value = 'none';
         }
         resetAll();
     }
@@ -574,6 +610,8 @@
             disableAllChoiceButtons(true);
             document.getElementById('actionBtn').style.visibility = 'visible';
             document.getElementById('actionBtn').innerText = 'スタート';
+        } else {
+            applyScaleSelection();
         }
     }
 
@@ -583,6 +621,67 @@
         } else {
             toggleAnalyzerNote(note, btn);
         }
+    }
+
+    /* ================= 新機能：スケール選択の適用処理 ================= */
+    function applyScaleSelection() {
+        if (currentMode !== 'analyzer') return;
+
+        const key = document.getElementById('keySelect').value;
+        const scaleType = document.getElementById('scaleSelect').value;
+
+        // 一旦アナライザーの一斉点灯セットをクリア
+        activeAnalyzerNotes.clear();
+        individuallyLitMarkers.clear();
+
+        // 下の12音ボタンのスタイルも一度全部フラットに戻す
+        allNotes.forEach(note => {
+            const btn = document.getElementById(`btn-${note.replace('/', '-')}`);
+            btn.style.backgroundColor = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        });
+
+        if (scaleType !== 'none') {
+            const intervals = scaleIntervals[scaleType];
+            const startIdx = chromaticScale.indexOf(key);
+
+            // インターバル計算をして構成音の音名を特定する
+            intervals.forEach(interval => {
+                const noteName = chromaticScale[(startIdx + interval) % 12];
+                
+                // 特定した音名を一斉点灯セットに注入
+                activeAnalyzerNotes.add(noteName);
+
+                // 対応する下の12音ボタンを点灯状態のハイライト色にする
+                const btn = document.getElementById(`btn-${noteName.replace('/', '-')}`);
+                if (btn) {
+                    btn.style.backgroundColor = noteColors[noteName];
+                    btn.style.borderColor = noteColors[noteName];
+                    btn.style.color = 'white';
+                }
+            });
+
+            // スケールを切り替えた瞬間に、鳴らせる範囲の構成音をポーンと綺麗にアルペジオ/コード再生
+            let delayOffset = 0;
+            for (let s = 6; s >= 1; s--) { // 6弦から1弦に向けて流れるように発音
+                for (let f = 0; f <= maxFretRange; f++) {
+                    if (activeAnalyzerNotes.has(boardData[s][f].n)) {
+                        // 少しだけ発音タイミングをずらすと綺麗に響く
+                        setTimeout(() => {
+                            if (currentMode === 'analyzer' && document.getElementById('scaleSelect').value === scaleType) {
+                                playGuitarNote(boardData[s][f].n, boardData[s][f].o);
+                            }
+                        }, delayOffset);
+                        delayOffset += 60; // 60ms 刻み
+                        break; // 1つの弦につき最初の1音だけ鳴らす（ジャランと鳴らすため）
+                    }
+                }
+            }
+        }
+
+        // 画面上の指板マーカーをリフレッシュ
+        updateAnalyzerMarkers();
     }
 
     /* ================= アナライザー：特定の座標（マス）クリック機能 ================= */
@@ -596,7 +695,6 @@
             individuallyLitMarkers.delete(coordKey);
         } else {
             individuallyLitMarkers.add(coordKey);
-            // 音を鳴らす（新機能連動）
             playGuitarNote(data.n, data.o);
         }
         
@@ -651,7 +749,6 @@
                 activeMarker.classList.add('visible-on');
             }
 
-            // 正解時にそのピッチをポーンと鳴らす（新機能連動）
             playGuitarNote(data.n, data.o);
 
             disableAllChoiceButtons(true);
@@ -685,7 +782,6 @@
             btn.style.borderColor = noteColors[note];
             btn.style.color = 'white';
 
-            // ボタンを押して全点灯させたとき、対応する音（和音含む）を同時に鳴らす
             for (let s = 1; s <= 6; s++) {
                 for (let f = 0; f <= maxFretRange; f++) {
                     if (boardData[s][f].n === note) {
