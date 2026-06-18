@@ -330,6 +330,89 @@
             color: white;
         }
         .control-btn:hover { background-color: #005bb5; }
+
+        /* ダイアトニックコードグリッド */
+        .chord-grid {
+            display: none;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 600px) {
+            .chord-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+        .chord-btn {
+            padding: 10px 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            background-color: #f0f0f2;
+            color: #333;
+            border: 2px solid #d1d1d6;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            line-height: 1.4;
+            text-align: center;
+        }
+        .chord-btn:hover { background-color: #e0e0e5; }
+        .chord-btn.active-chord {
+            background-color: #0071e3;
+            border-color: #0071e3;
+            color: white;
+        }
+        .chord-btn .roman { font-size: 1rem; display: block; }
+        .chord-btn .chord-quality { font-size: 0.7rem; opacity: 0.8; display: block; }
+
+        /* コード構成音表示エリア */
+        .chord-tones-display {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            background: #f5f5f7;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .chord-tones-label {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #555;
+        }
+        .chord-tones-circles {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .chord-tone-marker {
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 0.75rem;
+            color: white;
+            box-sizing: border-box;
+            line-height: 1;
+        }
+        .chord-tone-marker.root-note {
+            background-color: #f5a623 !important;
+            box-shadow: 0 0 10px rgba(245, 166, 35, 0.8);
+            border: 2px solid #fff;
+            transform: scale(1.1);
+        }
+        .chord-tone-marker .tone-text { display: block; }
+        .chord-tone-slash {
+            font-size: 1.2rem;
+            color: #999;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="mode-quiz">
@@ -409,6 +492,13 @@
         </table>
     </div>
 
+    <div class="chord-tones-display" id="chordTonesDisplay">
+        <div class="chord-tones-label" id="chordTonesLabel"></div>
+        <div class="chord-tones-circles" id="chordTonesCircles"></div>
+    </div>
+
+    <div class="chord-grid" id="chordGrid"></div>
+
     <div class="choices-grid" id="choicesGrid">
         </div>
 
@@ -431,6 +521,20 @@
         "C#/Db": "#00C7BE", "D": "#0071e3", "D#/Eb": "#5856D6", "E": "#AF52DE",
         "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
     };
+
+    const diatonicChordQualities = {
+        major: ['maj', 'min', 'min', 'maj', 'maj', 'min', 'dim'],
+        minor: ['min', 'dim', 'maj', 'min', 'min', 'maj', 'maj'],
+    };
+    const chordIntervalMap = { maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6] };
+    const romanNumeralsBase = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+
+    function getRomanNumeral(index, quality) {
+        const base = romanNumeralsBase[index];
+        if (quality === 'min') return base.toLowerCase();
+        if (quality === 'dim') return base.toLowerCase() + '°';
+        return base;
+    }
 
     const scaleIntervals = {
         major: [0, 2, 4, 5, 7, 9, 11],
@@ -562,6 +666,7 @@
         // 表示を即座に更新
         if (currentMode === 'analyzer') {
             updateAnalyzerMarkers();
+            if (currentChordTones.length > 0) renderChordToneCircles();
         } else if (isAnswered) {
             // クイズ解答後であればクイズのマーカーも更新
             const marker = document.getElementById(`marker-${currentString}-${currentFret}`);
@@ -622,6 +727,9 @@
             document.getElementById('controlWrapper').style.display = 'block';
             document.getElementById('displayContent').className = 'question';
             document.getElementById('displayContent').innerText = '「スタート」を押してね';
+            document.getElementById('chordGrid').style.display = 'none';
+            document.getElementById('chordTonesDisplay').style.display = 'none';
+            document.getElementById('choicesGrid').style.display = 'grid';
             disableAllChoiceButtons(true);
         } else {
             document.body.className = 'mode-analyzer';
@@ -630,7 +738,7 @@
             document.getElementById('scalePanel').style.display = 'block';
             document.getElementById('controlWrapper').style.display = 'none';
             document.getElementById('displayContent').className = 'analyzer-instruction';
-            document.getElementById('displayContent').innerText = '指板を直接押すか、スケールを選んで練習順（度数）を確認しましょう';
+            document.getElementById('displayContent').innerText = '指板を直接押すか、スケールを選んでダイアトニックコードを確認しましょう';
             disableAllChoiceButtons(false);
             document.getElementById('scaleSelect').value = 'none';
         }
@@ -669,6 +777,12 @@
             b.style.backgroundColor = ''; b.style.borderColor = ''; b.style.color = '';
         });
 
+        // コードグリッドとコード構成音表示をリセット
+        document.getElementById('chordGrid').style.display = 'none';
+        document.getElementById('chordTonesDisplay').style.display = 'none';
+        document.getElementById('chordGrid').innerHTML = '';
+        document.getElementById('choicesGrid').style.display = 'grid';
+
         if (scaleType !== 'none') {
             const intervals = scaleIntervals[scaleType];
             const startIdx = chromaticScale.indexOf(key);
@@ -688,8 +802,89 @@
                     }
                 }
             }
+
+            // ダイアトニックコードボタンを生成（major/minorのみ）
+            if (diatonicChordQualities[scaleType]) {
+                const qualities = diatonicChordQualities[scaleType];
+                const chordGrid = document.getElementById('chordGrid');
+                chordGrid.style.display = 'grid';
+                document.getElementById('choicesGrid').style.display = 'none';
+
+                qualities.forEach((quality, i) => {
+                    const rootNote = chromaticScale[(startIdx + intervals[i]) % 12];
+                    const roman = getRomanNumeral(i, quality);
+                    const qualityLabel = quality === 'maj' ? 'Maj' : quality === 'min' ? 'min' : 'dim';
+
+                    const btn = document.createElement('button');
+                    btn.className = 'chord-btn';
+                    btn.id = `chord-btn-${i}`;
+                    btn.innerHTML = `<span class="roman">${roman}</span><span class="chord-quality">${rootNote} ${qualityLabel}</span>`;
+                    btn.onclick = () => handleChordClick(i, rootNote, quality, roman);
+                    chordGrid.appendChild(btn);
+                });
+            }
         }
         updateAnalyzerMarkers();
+    }
+
+    let currentChordTones = []; // { note, isRoot } の配列を保持
+
+    function handleChordClick(index, rootNote, quality, roman) {
+        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
+        document.getElementById(`chord-btn-${index}`).classList.add('active-chord');
+
+        const rootIdx = chromaticScale.indexOf(rootNote);
+
+        // アルペジオ再生（低弦側から近いオクターブで順番に鳴らす）
+        const tonesForSound = chordIntervalMap[quality].map(interval =>
+            chromaticScale[(rootIdx + interval) % 12]
+        );
+        tonesForSound.forEach((note, i) => {
+            const oct = (note === 'C' && i > 0) ? 4 : (chromaticScale.indexOf(note) < 4 ? 3 : 3);
+            setTimeout(() => playGuitarNote(note, oct), i * 80);
+        });
+
+        currentChordTones = chordIntervalMap[quality].map((interval, i) => ({
+            note: chromaticScale[(rootIdx + interval) % 12],
+            isRoot: i === 0
+        }));
+
+        const display = document.getElementById('chordTonesDisplay');
+        display.style.display = 'flex';
+        document.getElementById('chordTonesLabel').innerText = `${roman}  (${rootNote} ${quality === 'maj' ? 'Major' : quality === 'min' ? 'minor' : 'dim'})`;
+        renderChordToneCircles();
+    }
+
+    function renderChordToneCircles() {
+        const container = document.getElementById('chordTonesCircles');
+        container.innerHTML = '';
+        const key = document.getElementById('keySelect').value;
+        const keyRootIdx = chromaticScale.indexOf(key);
+
+        currentChordTones.forEach((tone, i) => {
+            if (i > 0) {
+                const slash = document.createElement('span');
+                slash.className = 'chord-tone-slash';
+                slash.innerText = '/';
+                container.appendChild(slash);
+            }
+
+            const circle = document.createElement('span');
+            circle.className = 'chord-tone-marker' + (tone.isRoot ? ' root-note' : '');
+            circle.style.backgroundColor = noteColors[tone.note];
+
+            let label;
+            if (displayMode === 'interval') {
+                const noteIdx = chromaticScale.indexOf(tone.note);
+                const semiSteps = (noteIdx - keyRootIdx + 12) % 12;
+                label = intervalMap[semiSteps];
+            } else {
+                label = tone.note;
+            }
+
+            circle.innerHTML = `<span class="tone-text">${label}</span>`;
+            container.appendChild(circle);
+        });
     }
 
     function handleFretCellClick(string, fret) {
@@ -770,6 +965,10 @@
 
     function resetAll() {
         activeAnalyzerNotes.clear(); individuallyLitMarkers.clear();
+        currentChordTones = [];
+        document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
+        document.getElementById('chordTonesDisplay').style.display = 'none';
+        document.getElementById('chordTonesCircles').innerHTML = '';
         for (let s = 1; s <= 6; s++) {
             for (let f = 0; f <= 24; f++) {
                 const m = document.getElementById(`marker-${s}-${f}`);
