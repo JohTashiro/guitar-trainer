@@ -416,6 +416,73 @@
             color: #999;
             font-weight: bold;
         }
+
+        /* コード進行プレイヤー */
+        .progression-panel {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px;
+            background: #f0f7ff;
+            border: 1px solid #b3d7ff;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .progression-panel-title {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #004b93;
+        }
+        .progression-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .progression-btn {
+            padding: 7px 14px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            border: 2px solid #0071e3;
+            border-radius: 20px;
+            background: white;
+            color: #0071e3;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .progression-btn:hover { background: #e8f0fe; }
+        .progression-btn.playing {
+            background: #0071e3;
+            color: white;
+        }
+        .progression-stop-btn {
+            padding: 7px 14px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            border: 2px solid #ff3b30;
+            border-radius: 20px;
+            background: white;
+            color: #ff3b30;
+            cursor: pointer;
+            display: none;
+        }
+        .progression-stop-btn:hover { background: #fff0ef; }
+        .progression-sequence {
+            font-size: 0.8rem;
+            color: #555;
+            min-height: 1.2em;
+        }
+        .progression-sequence .step {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin: 2px;
+            transition: background 0.1s;
+        }
+        .progression-sequence .step.current-step {
+            background: #0071e3;
+            color: white;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="mode-quiz">
@@ -493,6 +560,15 @@
             <tbody id="fretboard-body">
                 </tbody>
         </table>
+    </div>
+
+    <div class="progression-panel" id="progressionPanel">
+        <div class="progression-panel-title">▶ コード進行プレイヤー</div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <div class="progression-btns" id="progressionBtns"></div>
+            <button class="progression-stop-btn" id="progressionStopBtn" onclick="stopProgression()">■ 停止</button>
+        </div>
+        <div class="progression-sequence" id="progressionSequence"></div>
     </div>
 
     <div class="chord-tones-display" id="chordTonesDisplay">
@@ -822,16 +898,106 @@
                     btn.className = 'chord-btn';
                     btn.id = `chord-btn-${i}`;
                     btn.innerHTML = `<span class="roman">${roman}</span><span class="chord-quality">${rootNote} ${qualityLabel}</span>`;
-                    btn.onclick = () => handleChordClick(i, rootNote, quality, roman);
+                    btn.onclick = () => { stopProgression(); handleChordClick(i, rootNote, quality, roman); };
                     chordGrid.appendChild(btn);
                 });
+
+                // コード進行プレイヤーパネルを生成
+                const progressions = progressionData[scaleType] || [];
+                const panel = document.getElementById('progressionPanel');
+                const btnsEl = document.getElementById('progressionBtns');
+                btnsEl.innerHTML = '';
+                document.getElementById('progressionSequence').innerHTML = '';
+                progressions.forEach(prog => {
+                    const btn = document.createElement('button');
+                    btn.className = 'progression-btn';
+                    btn.dataset.name = prog.name;
+                    btn.innerText = prog.name;
+                    btn.onclick = () => playProgression(prog.name, prog.degrees, scaleType);
+                    btnsEl.appendChild(btn);
+                });
+                panel.style.display = 'flex';
+            } else {
+                document.getElementById('progressionPanel').style.display = 'none';
             }
         }
         updateAnalyzerMarkers();
     }
 
+    const progressionData = {
+        major: [
+            { name: 'カノン',    degrees: [1,5,6,3,4,1,4,5] },
+            { name: '王道',      degrees: [4,5,3,6] },
+            { name: 'ii-V-I',   degrees: [2,5,1] },
+            { name: 'I-IV-V',   degrees: [1,4,5] },
+            { name: 'I-V-vi-IV', degrees: [1,5,6,4] },
+        ],
+        minor: [
+            { name: '小室',      degrees: [1,7,6,7] },
+            { name: 'i-VII-VI-V', degrees: [1,7,6,5] },
+            { name: 'i-iv-VII',  degrees: [1,4,7] },
+            { name: 'i-VI-III-VII', degrees: [1,6,3,7] },
+        ],
+    };
+
+    let progressionTimers = [];
+    let isProgressionPlaying = false;
+
     let currentChordTones = [];
-    let currentChordNotes = new Set(); // 現在選択中のコード構成音
+    let currentChordNotes = new Set();
+
+    function playProgression(progName, degrees, scaleType) {
+        stopProgression();
+        isProgressionPlaying = true;
+
+        const key = document.getElementById('keySelect').value;
+        const startIdx = chromaticScale.indexOf(key);
+        const intervals = scaleIntervals[scaleType];
+        const qualities = diatonicChordQualities[scaleType];
+
+        // ローマ数字シーケンスを表示
+        const seqEl = document.getElementById('progressionSequence');
+        seqEl.innerHTML = degrees.map((d, i) => {
+            const q = qualities[d - 1];
+            const roman = getRomanNumeral(d - 1, q);
+            return `<span class="step" id="prog-step-${i}">${roman}</span>`;
+        }).join(' → ');
+
+        document.getElementById('progressionStopBtn').style.display = 'inline-block';
+        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
+        document.querySelector(`.progression-btn[data-name="${progName}"]`).classList.add('playing');
+
+        const msPerChord = 1600;
+        degrees.forEach((degree, i) => {
+            const t = setTimeout(() => {
+                if (!isProgressionPlaying) return;
+                // ステップ強調
+                document.querySelectorAll('.prog-step-highlight').forEach(s => s.classList.remove('current-step'));
+                const stepEl = document.getElementById(`prog-step-${i}`);
+                if (stepEl) stepEl.classList.add('current-step');
+
+                const chordIdx = degree - 1;
+                const rootNote = chromaticScale[(startIdx + intervals[chordIdx]) % 12];
+                const quality = qualities[chordIdx];
+                const roman = getRomanNumeral(chordIdx, quality);
+                handleChordClick(chordIdx, rootNote, quality, roman);
+            }, i * msPerChord);
+            progressionTimers.push(t);
+        });
+
+        // 終了処理
+        const endTimer = setTimeout(() => stopProgression(), degrees.length * msPerChord + 200);
+        progressionTimers.push(endTimer);
+    }
+
+    function stopProgression() {
+        progressionTimers.forEach(t => clearTimeout(t));
+        progressionTimers = [];
+        isProgressionPlaying = false;
+        document.getElementById('progressionStopBtn').style.display = 'none';
+        document.querySelectorAll('.progression-btn').forEach(b => b.classList.remove('playing'));
+        document.querySelectorAll('#progressionSequence .step').forEach(s => s.classList.remove('current-step'));
+    }
 
     function handleChordClick(index, rootNote, quality, roman) {
         document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
@@ -976,6 +1142,7 @@
 
     function resetAll() {
         activeAnalyzerNotes.clear(); individuallyLitMarkers.clear();
+        stopProgression();
         currentChordTones = [];
         currentChordNotes = new Set();
         document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
