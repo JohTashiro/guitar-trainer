@@ -33,12 +33,33 @@
             margin-bottom: 20px;
             border-bottom: 1px solid #e5e5e5;
             padding-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         h1 {
             font-size: 1.3rem;
             color: #333;
             margin: 0;
         }
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        /* ボリュームスライダー */
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #555;
+        }
+        .volume-control input {
+            width: 80px;
+            cursor: pointer;
+        }
+
         .mode-toggle-btn {
             padding: 8px 16px;
             font-size: 0.85rem;
@@ -291,7 +312,13 @@
 <div class="container">
     <div class="app-header">
         <h1>ギター指板 フルレンジ・トレーナー</h1>
-        <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
+        <div class="header-controls">
+            <div class="volume-control">
+                <span>🔊 VOL:</span>
+                <input type="range" id="volumeSlider" min="0" max="0.5" step="0.05" value="0.2">
+            </div>
+            <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
+        </div>
     </div>
     
     <div class="control-panel">
@@ -343,9 +370,7 @@
 </div>
 
 <script>
-    // ループ計算用の基準12音（Cから始まるクロマチックスケール）
     const chromaticScale = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
-
     const allNotes = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab"];
 
     const noteColors = {
@@ -354,35 +379,13 @@
         "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
     };
 
-    // プリセットごとの各弦の開放弦情報 (音名とオクターブ)
     const tuningPresets = {
-        regular: {
-            1: { n: "E", o: 4 },
-            2: { n: "B", o: 3 },
-            3: { n: "G", o: 3 },
-            4: { n: "D", o: 3 },
-            5: { n: "A", o: 2 },
-            6: { n: "E", o: 2 }
-        },
-        halfStepDown: {
-            1: { n: "D#/Eb", o: 4 },
-            2: { n: "A#/Bb", o: 3 },
-            3: { n: "F#/Gb", o: 3 },
-            4: { n: "C#/Db", o: 3 },
-            5: { n: "G#/Ab", o: 2 },
-            6: { n: "D#/Eb", o: 2 }
-        },
-        dropD: {
-            1: { n: "E", o: 4 },
-            2: { n: "B", o: 3 },
-            3: { n: "G", o: 3 },
-            4: { n: "D", o: 3 },
-            5: { n: "A", o: 2 },
-            6: { n: "D", o: 2 } // 6弦だけDにドロップ
-        }
+        regular: { 1: { n: "E", o: 4 }, 2: { n: "B", o: 3 }, 3: { n: "G", o: 3 }, 4: { n: "D", o: 3 }, 5: { n: "A", o: 2 }, 6: { n: "E", o: 2 } },
+        halfStepDown: { 1: { n: "D#/Eb", o: 4 }, 2: { n: "A#/Bb", o: 3 }, 3: { n: "F#/Gb", o: 3 }, 4: { n: "C#/Db", o: 3 }, 5: { n: "G#/Ab", o: 2 }, 6: { n: "D#/Eb", o: 2 } },
+        dropD: { 1: { n: "E", o: 4 }, 2: { n: "B", o: 3 }, 3: { n: "G", o: 3 }, 4: { n: "D", o: 3 }, 5: { n: "A", o: 2 }, 6: { n: "D", o: 2 } }
     };
 
-    let boardData = {}; // 動的に再計算される指板データ
+    let boardData = {}; 
     let currentMode = 'quiz';
     let maxFretRange = 12;
     let currentString = 0;
@@ -392,34 +395,75 @@
     let activeAnalyzerNotes = new Set();
     let individuallyLitMarkers = new Set();
 
-    // --- [コアロジック] チューニングに応じた指板データの生成関数 ---
+    // Web Audio API 用のコンテキスト変数
+    let audioCtx = null;
+
+    // --- [音源ロジック] 音名とオクターブから周波数を計算して鳴らす ---
+    function playGuitarNote(noteName, octave) {
+        // ユーザーがブラウザを操作した後にオーディオコンテキストを初期化（ブラウザのセキュリティ制限回避）
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
+        // A4 = 440Hz を基準とした12平均律の計算
+        const targetNote = noteName.split('/')[0]; // "A#/Bb" の場合は "A#" を使用
+        const noteValues = { "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11 };
+        
+        const keyNumber = noteValues[targetNote] + (octave * 12);
+        const a4KeyNumber = noteValues["A"] + (4 * 12); // 57
+        
+        // 周波数算出の公式: 440 * 2^((n - 57) / 12)
+        const frequency = 440 * Math.pow(2, (keyNumber - a4KeyNumber) / 12);
+
+        // 音量コントロール
+        const masterVol = parseFloat(document.getElementById('volumeSlider').value);
+        if (masterVol === 0) return; // ミュート時は処理スキップ
+
+        // オシレーター（発振器）とゲイン（音量）ノードの生成
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        // ギターに近い、少し角のある「三角波(triangle)」を採用（サイン波より音程が聞き取りやすい）
+        osc.type = 'triangle';
+        osc.frequency.value = frequency;
+
+        // 音のエンベロープ（アタックと減衰）の設定。ギターっぽくポーンと減衰させる
+        const now = audioCtx.currentTime;
+        gainNode.gain.setValueAtTime(masterVol, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2); // 1.2秒かけて消音
+
+        // ルーティング: 信号を発振器 -> 音量調整 -> スピーカーへ
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        // 再生と自動停止
+        osc.start(now);
+        osc.stop(now + 1.2);
+    }
+
     function generateBoardData(tuningKey) {
         const preset = tuningPresets[tuningKey];
         boardData = {};
-
         for (let s = 1; s <= 6; s++) {
             boardData[s] = [];
             const openNote = preset[s].n;
             let currentOct = preset[s].o;
-            
-            // 開放弦がchromaticScaleのどこにあるかインデックスを取得
             let pIdx = chromaticScale.indexOf(openNote);
 
             for (let f = 0; f <= 24; f++) {
                 let noteName = chromaticScale[pIdx];
-
-                // 0Fより後ろで、Cに到達したタイミングでオクターブが1つ上がるルール
                 if (f > 0 && noteName === "C") {
                     currentOct++;
                 }
-
                 boardData[s].push({ n: noteName, o: currentOct });
                 pIdx = (pIdx + 1) % 12;
             }
         }
     }
 
-    // 初回はレギュラーチューニングで生成
     generateBoardData('regular');
 
     // テーブルヘッダーの生成
@@ -431,7 +475,6 @@
         if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
         if (f === 12 || f === 24) classes.push('double-dot-fret');
         if (f > 12) classes.push('extended-fret');
-        
         let clsAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : '';
         trHead.innerHTML += `<th id="th-fret-${f}" ${clsAttr}>${f}</th>`;
     }
@@ -481,16 +524,9 @@
         grid.appendChild(btn);
     });
 
-    // チューニング変更が選ばれたときのハンドラ
     function handleTuningChange() {
-        const selectedTuning = document.getElementById('tuningSelect').value;
-        
-        // 新しいチューニングでデータを再構築
-        generateBoardData(selectedTuning);
-        
-        // アプリの状態をリセット
+        generateBoardData(document.getElementById('tuningSelect').value);
         resetAll();
-
         if (currentMode === 'quiz') {
             document.getElementById('displayContent').innerText = '「スタート」を押してね';
             disableAllChoiceButtons(true);
@@ -499,11 +535,9 @@
         }
     }
 
-    // モード切り替え
     function toggleMode() {
         const nextMode = (currentMode === 'quiz') ? 'analyzer' : 'quiz';
         currentMode = nextMode;
-        
         const toggleBtn = document.getElementById('modeToggleBtn');
         
         if (currentMode === 'quiz') {
@@ -520,23 +554,19 @@
             document.getElementById('settingsPanel').style.display = 'none';
             document.getElementById('controlWrapper').style.display = 'none';
             document.getElementById('displayContent').className = 'analyzer-instruction';
-            document.getElementById('displayContent').innerText = '指板のマスを直接押すか、下のボタンで対応する音名を全点灯できます';
+            document.getElementById('displayContent').innerText = '指板のマスを直接押すか、下のボタンで対応する音名を全点灯できます（音が出ます）';
             disableAllChoiceButtons(false);
         }
-        
         resetAll();
     }
 
-    // フレットレンジの切り替え
     function switchRange(range) {
         maxFretRange = range;
         document.getElementById('range-12').classList.toggle('active', range === 12);
         document.getElementById('range-24').classList.toggle('active', range === 24);
         
         const extendedElements = document.querySelectorAll('.extended-fret');
-        extendedElements.forEach(el => {
-            el.style.display = (range === 24) ? 'table-cell' : 'none';
-        });
+        extendedElements.forEach(el => el.style.display = (range === 24) ? 'table-cell' : 'none');
 
         resetAll();
         if (currentMode === 'quiz') {
@@ -560,11 +590,14 @@
         if (currentMode !== 'analyzer') return;
 
         const coordKey = `${string}-${fret}`;
+        const data = boardData[string][fret];
         
         if (individuallyLitMarkers.has(coordKey)) {
             individuallyLitMarkers.delete(coordKey);
         } else {
             individuallyLitMarkers.add(coordKey);
+            // 音を鳴らす（新機能連動）
+            playGuitarNote(data.n, data.o);
         }
         
         updateAnalyzerMarkers();
@@ -618,6 +651,9 @@
                 activeMarker.classList.add('visible-on');
             }
 
+            // 正解時にそのピッチをポーンと鳴らす（新機能連動）
+            playGuitarNote(data.n, data.o);
+
             disableAllChoiceButtons(true);
             document.getElementById('actionBtn').style.visibility = 'visible';
             document.getElementById('actionBtn').innerText = '次の問題';
@@ -648,6 +684,15 @@
             btn.style.backgroundColor = noteColors[note];
             btn.style.borderColor = noteColors[note];
             btn.style.color = 'white';
+
+            // ボタンを押して全点灯させたとき、対応する音（和音含む）を同時に鳴らす
+            for (let s = 1; s <= 6; s++) {
+                for (let f = 0; f <= maxFretRange; f++) {
+                    if (boardData[s][f].n === note) {
+                        playGuitarNote(boardData[s][f].n, boardData[s][f].o);
+                    }
+                }
+            }
         }
         updateAnalyzerMarkers();
     }
