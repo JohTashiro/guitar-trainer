@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ギター指板 アドバンスド・トレーナー</title>
+    <title>ギター指板 フルレンジ・トレーナー</title>
     <style>
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -66,7 +66,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             flex-wrap: wrap;
         }
         
@@ -85,6 +85,19 @@
             border-color: #0071e3;
             background: #0071e3;
             color: white;
+        }
+
+        /* チューニングセレクト */
+        .select-tuning {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border: 2px solid #0071e3;
+            border-radius: 6px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            outline: none;
         }
 
         /* 出題範囲設定パネル */
@@ -174,17 +187,14 @@
             box-shadow: 2px 0 5px rgba(0,0,0,0.05);
         }
         
-        /* アナライザーモード時の、指板マスのホバーエフェクト */
         body.mode-analyzer td.fret-cell:hover {
             background-color: #eef7ff !important;
             cursor: pointer;
         }
         
-        /* ポジションマーク背景 */
         .dot-fret { background-color: #f9f9f9; }
         .double-dot-fret { background-color: #e5e5e5; }
 
-        /* 13F以降の非表示制御用 */
         .extended-fret {
             display: none;
         }
@@ -205,7 +215,7 @@
             visibility: hidden;
             box-sizing: border-box;
             line-height: 1;
-            pointer-events: none; /* マス自体のクリックイベントを邪魔しない */
+            pointer-events: none;
         }
         .target-marker span.octave {
             font-size: 0.5rem;
@@ -276,7 +286,9 @@
         .control-btn:hover { background-color: #005bb5; }
     </style>
 </head>
-<body class="mode-quiz"> <div class="container">
+<body class="mode-quiz">
+
+<div class="container">
     <div class="app-header">
         <h1>ギター指板 フルレンジ・トレーナー</h1>
         <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
@@ -287,6 +299,13 @@
             <span style="font-size: 0.85rem; font-weight: bold; color: #555;">表示レンジ:</span>
             <button id="range-12" class="switch-btn active" onclick="switchRange(12)">12 フレット</button>
             <button id="range-24" class="switch-btn" onclick="switchRange(24)">24 フレット</button>
+
+            <span style="font-size: 0.85rem; font-weight: bold; color: #555; margin-left: 10px;">チューニング:</span>
+            <select id="tuningSelect" class="select-tuning" onchange="handleTuningChange()">
+                <option value="regular">Regular (1E, 2B, 3G, 4D, 5A, 6E)</option>
+                <option value="halfStepDown">Half Step Down (1Eb, 2Bb, 3Gb, 4Db, 5Ab, 6Eb)</option>
+                <option value="dropD">Drop D (1E, 2B, 3G, 4D, 5A, 6D)</option>
+            </select>
         </div>
         
         <div class="settings-panel" id="settingsPanel">
@@ -324,6 +343,9 @@
 </div>
 
 <script>
+    // ループ計算用の基準12音（Cから始まるクロマチックスケール）
+    const chromaticScale = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
+
     const allNotes = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab"];
 
     const noteColors = {
@@ -332,26 +354,35 @@
         "F": "#FF2D55", "F#/Gb": "#A2845E", "G": "#5AC8FA", "G#/Ab": "#8E8E93"
     };
 
-    const pattern = ["E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb"];
-    const startIndices = { 1: 0, 2: 7, 3: 3, 4: 10, 5: 5, 6: 0 };
-    const startOctaves = { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 2 };
-
-    const boardData = {};
-    for (let s = 1; s <= 6; s++) {
-        boardData[s] = [];
-        let pIdx = startIndices[s];
-        let currentOct = startOctaves[s];
-        
-        for (let f = 0; f <= 24; f++) {
-            let noteName = pattern[pIdx];
-            if (f > 0 && noteName === "C") {
-                currentOct++;
-            }
-            boardData[s].push({ n: noteName, o: currentOct });
-            pIdx = (pIdx + 1) % 12;
+    // プリセットごとの各弦の開放弦情報 (音名とオクターブ)
+    const tuningPresets = {
+        regular: {
+            1: { n: "E", o: 4 },
+            2: { n: "B", o: 3 },
+            3: { n: "G", o: 3 },
+            4: { n: "D", o: 3 },
+            5: { n: "A", o: 2 },
+            6: { n: "E", o: 2 }
+        },
+        halfStepDown: {
+            1: { n: "D#/Eb", o: 4 },
+            2: { n: "A#/Bb", o: 3 },
+            3: { n: "F#/Gb", o: 3 },
+            4: { n: "C#/Db", o: 3 },
+            5: { n: "G#/Ab", o: 2 },
+            6: { n: "D#/Eb", o: 2 }
+        },
+        dropD: {
+            1: { n: "E", o: 4 },
+            2: { n: "B", o: 3 },
+            3: { n: "G", o: 3 },
+            4: { n: "D", o: 3 },
+            5: { n: "A", o: 2 },
+            6: { n: "D", o: 2 } // 6弦だけDにドロップ
         }
-    }
+    };
 
+    let boardData = {}; // 動的に再計算される指板データ
     let currentMode = 'quiz';
     let maxFretRange = 12;
     let currentString = 0;
@@ -359,9 +390,37 @@
     let correctAnswer = "";
     let isAnswered = false;
     let activeAnalyzerNotes = new Set();
-    
-    // マス個別クリック用：点灯している座標(文字列形式 '弦-フレット' )を記録するセット
     let individuallyLitMarkers = new Set();
+
+    // --- [コアロジック] チューニングに応じた指板データの生成関数 ---
+    function generateBoardData(tuningKey) {
+        const preset = tuningPresets[tuningKey];
+        boardData = {};
+
+        for (let s = 1; s <= 6; s++) {
+            boardData[s] = [];
+            const openNote = preset[s].n;
+            let currentOct = preset[s].o;
+            
+            // 開放弦がchromaticScaleのどこにあるかインデックスを取得
+            let pIdx = chromaticScale.indexOf(openNote);
+
+            for (let f = 0; f <= 24; f++) {
+                let noteName = chromaticScale[pIdx];
+
+                // 0Fより後ろで、Cに到達したタイミングでオクターブが1つ上がるルール
+                if (f > 0 && noteName === "C") {
+                    currentOct++;
+                }
+
+                boardData[s].push({ n: noteName, o: currentOct });
+                pIdx = (pIdx + 1) % 12;
+            }
+        }
+    }
+
+    // 初回はレギュラーチューニングで生成
+    generateBoardData('regular');
 
     // テーブルヘッダーの生成
     const thead = document.getElementById('fretboard-head');
@@ -384,19 +443,19 @@
         const tr = document.createElement('tr');
         tr.id = `string-${s}`;
         const tdLabel = document.createElement('td');
+        tdLabel.id = `string-label-${s}`;
         tdLabel.innerText = `${s}弦`;
         tr.appendChild(tdLabel);
         
         for (let f = 0; f <= 24; f++) {
             const td = document.createElement('td');
-            let classes = ['fret-cell']; // 個別クリックイベント用の識別クラス
+            let classes = ['fret-cell'];
             if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) classes.push('dot-fret');
             if (f === 12 || f === 24) classes.push('double-dot-fret');
             if (f > 12) classes.push('extended-fret');
             td.className = classes.join(' ');
             td.id = `td-${s}-${f}`;
             
-            // マスをクリックしたときの処理を追加
             td.onclick = () => handleFretCellClick(s, f);
             
             const span = document.createElement('span');
@@ -421,6 +480,24 @@
         btn.onclick = () => handleNoteClick(note, btn);
         grid.appendChild(btn);
     });
+
+    // チューニング変更が選ばれたときのハンドラ
+    function handleTuningChange() {
+        const selectedTuning = document.getElementById('tuningSelect').value;
+        
+        // 新しいチューニングでデータを再構築
+        generateBoardData(selectedTuning);
+        
+        // アプリの状態をリセット
+        resetAll();
+
+        if (currentMode === 'quiz') {
+            document.getElementById('displayContent').innerText = '「スタート」を押してね';
+            disableAllChoiceButtons(true);
+            document.getElementById('actionBtn').style.visibility = 'visible';
+            document.getElementById('actionBtn').innerText = 'スタート';
+        }
+    }
 
     // モード切り替え
     function toggleMode() {
@@ -480,21 +557,16 @@
 
     /* ================= アナライザー：特定の座標（マス）クリック機能 ================= */
     function handleFretCellClick(string, fret) {
-        // アナライザーモードのときだけ動作させる
         if (currentMode !== 'analyzer') return;
 
         const coordKey = `${string}-${fret}`;
-        const data = boardData[string][fret];
         
         if (individuallyLitMarkers.has(coordKey)) {
-            // すでに個別点灯している場合は消灯
             individuallyLitMarkers.delete(coordKey);
         } else {
-            // 点灯していない場合は座標を登録
             individuallyLitMarkers.add(coordKey);
         }
         
-        // 画面の下ボタンの状態も考慮しつつ、指板の描画をリフレッシュ
         updateAnalyzerMarkers();
     }
 
@@ -564,7 +636,6 @@
             btn.style.borderColor = '';
             btn.style.color = '';
             
-            // ★ここを追加：下のボタンがオフになった音名について、セルの個別クリック記憶もすべて削除する
             for (let s = 1; s <= 6; s++) {
                 for (let f = 0; f <= 24; f++) {
                     if (boardData[s][f].n === note) {
@@ -588,7 +659,6 @@
                 const data = boardData[s][f];
                 const coordKey = `${s}-${f}`;
                 
-                // 「下の音名ボタンがON」または「そのマスが個別クリックでON」のどちらかであれば点灯
                 if (activeAnalyzerNotes.has(data.n) || individuallyLitMarkers.has(coordKey)) {
                     marker.querySelector('.note-text').innerText = data.n;
                     marker.querySelector('.octave').innerText = data.o;
@@ -607,7 +677,7 @@
     /* ================= ユーティリティ ================= */
     function resetAll() {
         activeAnalyzerNotes.clear();
-        individuallyLitMarkers.clear(); // 個別クリックの記憶もリセット
+        individuallyLitMarkers.clear();
         for (let s = 1; s <= 6; s++) {
             for (let f = 0; f <= 24; f++) {
                 const marker = document.getElementById(`marker-${s}-${f}`);
