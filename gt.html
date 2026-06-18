@@ -273,6 +273,10 @@
             visibility: visible !important;
             animation: pop 0.15s ease-out;
         }
+        .target-marker.dimmed {
+            opacity: 0.2;
+            transform: scale(0.85);
+        }
 
         @keyframes pop {
             0% { transform: scale(0.8); }
@@ -402,8 +406,7 @@
             line-height: 1;
         }
         .chord-tone-marker.root-note {
-            background-color: #f5a623 !important;
-            box-shadow: 0 0 10px rgba(245, 166, 35, 0.8);
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
             border: 2px solid #fff;
             transform: scale(1.1);
         }
@@ -827,7 +830,8 @@
         updateAnalyzerMarkers();
     }
 
-    let currentChordTones = []; // { note, isRoot } の配列を保持
+    let currentChordTones = [];
+    let currentChordNotes = new Set(); // 現在選択中のコード構成音
 
     function handleChordClick(index, rootNote, quality, roman) {
         document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
@@ -848,11 +852,13 @@
             note: chromaticScale[(rootIdx + interval) % 12],
             isRoot: i === 0
         }));
+        currentChordNotes = new Set(currentChordTones.map(t => t.note));
 
         const display = document.getElementById('chordTonesDisplay');
         display.style.display = 'flex';
         document.getElementById('chordTonesLabel').innerText = `${roman}  (${rootNote} ${quality === 'maj' ? 'Major' : quality === 'min' ? 'minor' : 'dim'})`;
         renderChordToneCircles();
+        updateAnalyzerMarkers();
     }
 
     function renderChordToneCircles() {
@@ -954,8 +960,13 @@
                     updateMarkerContent(m, d);
                     m.style.backgroundColor = noteColors[d.n];
                     m.classList.add('visible-on');
+                    if (currentChordNotes.size > 0 && !currentChordNotes.has(d.n)) {
+                        m.classList.add('dimmed');
+                    } else {
+                        m.classList.remove('dimmed');
+                    }
                 } else {
-                    m.style.backgroundColor = ''; m.classList.remove('visible-on', 'root-note');
+                    m.style.backgroundColor = ''; m.classList.remove('visible-on', 'root-note', 'dimmed');
                     m.querySelector('.note-text').innerText = '●';
                     m.querySelector('.octave').innerText = '';
                 }
@@ -966,6 +977,7 @@
     function resetAll() {
         activeAnalyzerNotes.clear(); individuallyLitMarkers.clear();
         currentChordTones = [];
+        currentChordNotes = new Set();
         document.querySelectorAll('.chord-btn').forEach(b => b.classList.remove('active-chord'));
         document.getElementById('chordTonesDisplay').style.display = 'none';
         document.getElementById('chordTonesCircles').innerHTML = '';
