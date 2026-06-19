@@ -649,7 +649,6 @@
     let currentChordTones      = [];
     let currentChordNotes      = new Set();
     let audioCtx               = null;
-    let audioInitPromise       = null;
 
     // =====================
     // 初期化
@@ -712,44 +711,9 @@
     // =====================
     // 音声
     // =====================
-    function initAudioOnce() {
-        if (audioInitPromise) return audioInitPromise;
-        audioInitPromise = (async () => {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                try { await audioCtx.resume(); } catch (_) {}
-            }
-            // iOS対策: 無音を短く鳴らしてアンロックを確実化
-            try {
-                const osc  = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                gain.gain.value = 0;
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                const t = audioCtx.currentTime;
-                osc.start(t);
-                osc.stop(t + 0.01);
-            } catch (_) {}
-        })();
-        return audioInitPromise;
-    }
-
-    // iOSでは「最初のユーザー操作」でAudioを起動する必要がある
-    (function setupAudioUnlock() {
-        const unlock = () => { initAudioOnce(); };
-        window.addEventListener('touchstart', unlock, { once: true, passive: true });
-        window.addEventListener('pointerdown', unlock, { once: true, passive: true });
-        window.addEventListener('mousedown', unlock, { once: true, passive: true });
-        window.addEventListener('click', unlock, { once: true, passive: true });
-    })();
-
     function playGuitarNote(noteName, octave) {
-        // 未アンロック時は、resume完了後に同じ音を再試行する（iOS対策）
-        if (!audioInitPromise) initAudioOnce();
-        if (!audioCtx || audioCtx.state === 'suspended') {
-            initAudioOnce().then(() => playGuitarNote(noteName, octave));
-            return;
-        }
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const noteValues = { C:0, "C#":1, D:2, "D#":3, E:4, F:5, "F#":6, G:7, "G#":8, A:9, "A#":10, B:11 };
         const targetNote = noteName.split('/')[0];
         const frequency  = 440 * Math.pow(2, (noteValues[targetNote] + octave * 12 - (noteValues["A"] + 48)) / 12);
