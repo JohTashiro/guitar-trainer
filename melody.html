@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Melody Player & Visualizer (Color Synced)</title>
+    <style>
+        body { font-family: sans-serif; background: #f5f5f7; padding: 20px; color: #333; margin: 0; }
+        .app-container { max-width: 1100px; margin: 0 auto; background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h2 { font-size: 1.2rem; margin-top: 0; color: #0071e3; border-bottom: 1px solid #e5e5e5; padding-bottom: 8px; }
+        
+        /* コントロールエリア */
+        .control-panel { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; background: #f5f5f7; padding: 10px 15px; border-radius: 8px; }
+        .panel-label { font-size: 0.85rem; font-weight: bold; color: #555; }
+        
+        /* 切り替えスイッチ */
+        .switch-btn { padding: 6px 14px; font-size: 0.8rem; font-weight: bold; border: 2px solid #8e8e93; border-radius: 20px; background: white; color: #555; cursor: pointer; transition: all 0.2s; }
+        .switch-btn.active { border-color: #0071e3; background: #0071e3; color: white; }
+
+        /* フルサイズ指板のスタイル */
+        .fretboard-wrapper { overflow-x: auto; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+        .fretboard { width: 100%; border-collapse: collapse; font-size: 0.75rem; min-width: 800px; }
+        .fretboard th, .fretboard td { border: 1px solid #ccc; padding: 6px 4px; text-align: center; cursor: pointer; position: relative; min-width: 32px; height: 35px; box-sizing: border-box; }
+        .fretboard th { background: #f2f2f2; cursor: default; font-weight: bold; }
+        
+        /* ポジションマークの背景 */
+        .fretboard td.dot-fret, .fretboard th.dot-fret { background-color: #f9f9f9; }
+        .fretboard td.double-dot-fret, .fretboard th.double-dot-fret { background-color: #eef5fc; }
+
+        /* 弦番号列の固定 */
+        .fretboard td:first-child, .fretboard th:first-child { background-color: #f2f2f2; font-weight: bold; position: sticky; left: 0; z-index: 10; cursor: default; width: 60px; min-width: 60px; }
+        .fretboard td:hover:not(:first-child) { background: #e6f2ff; }
+        
+        /* ★一回使われたことのある音のスタイル */
+        td.used-fret {
+            border: 2px solid var(--note-color) !important;
+        }
+        td.used-fret::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: calc(50% - 3px);
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--note-color);
+            opacity: 0.7;
+        }
+
+        /* 再生中ハイライト */
+        td.playing-now {
+            background-color: #222 !important;
+            color: #fff !important;
+            font-weight: bold;
+            box-shadow: inset 0 0 8px rgba(255,255,255,0.4);
+            border: 2px solid var(--note-color) !important;
+        }
+        
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+        button, .file-input-label { padding: 10px 16px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; display: inline-block; box-sizing: border-box; }
+        .btn-primary { background: #0071e3; color: white; }
+        .btn-play { background: #ff9500; color: white; }
+        .btn-warning { background: #5ac8fa; color: white; } /* 1個戻る用 */
+        .btn-secondary { background: #34c759; color: white; }
+        .btn-danger { background: #ff3b30; color: white; }
+        
+        input[type="file"] { display: none; }
+        
+        /* グラフエリア */
+        .chart-wrapper { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px; text-align: center; }
+        canvas { background: white; border: 1px solid #d1d1d6; width: 100%; height: 220px; }
+        
+        .log-view { margin-top: 15px; font-family: monospace; background: #222; color: #34c759; padding: 10px; border-radius: 6px; font-size: 0.8rem; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>1. 指板レンジ設定 & メロディ入力</h2>
+    
+    <div class="control-panel">
+        <span class="panel-label">表示フレット数:</span>
+        <button id="range-12" class="switch-btn" onclick="switchFretRange(12)">12フレット</button>
+        <button id="range-24" class="switch-btn active" onclick="switchFretRange(24)">24フレット</button>
+    </div>
+
+    <div class="fretboard-wrapper">
+        <table class="fretboard">
+            <thead id="fretboard-head"></thead>
+            <tbody id="fretboard-body"></tbody>
+        </table>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-play" id="playBtn" onclick="playMelodySequence()">▶ メロディを流す</button>
+        <button class="btn-warning" id="undoBtn" onclick="undoLastNote()">↩ 1個戻る</button>
+        
+        <button class="btn-primary" onclick="exportMelody()">JSONとしてエクスポート</button>
+        <label class="file-input-label btn-secondary">JSONをインポート
+            <input type="file" id="importFile" accept=".json" onchange="importMelody(event)">
+        </label>
+        <button class="btn-danger" onclick="clearMelody()">リセット</button>
+    </div>
+
+    <h2>2. メロディラインの可視化 (各音の固有カラーを反映)</h2>
+    <div class="chart-wrapper">
+        <canvas id="melodyChart" width="1000" height="220"></canvas>
+    </div>
+
+    <div class="log-view" id="logView">現在のシーケンス: []</div>
+</div>
+
+<script>
+    // ★指定された音名カラーマップ (異名同音の表記ゆれ対策のためキーを網羅)
+    const noteColors = {
+        "A": "#FF3B30", "A#": "#FF9500", "Bb": "#FF9500", "A#/Bb": "#FF9500", 
+        "B": "#FFCC00", 
+        "C": "#34C759", 
+        "C#": "#00C7BE", "Db": "#00C7BE", "C#/Db": "#00C7BE",
+        "D": "#0071e3", 
+        "D#": "#5856D6", "Eb": "#5856D6", "D#/Eb": "#5856D6",
+        "E": "#AF52DE",
+        "F": "#FF2D55", 
+        "F#": "#A2845E", "Gb": "#A2845E", "F#/Gb": "#A2845E",
+        "G": "#5AC8FA", 
+        "G#": "#8E8E93", "Ab": "#8E8E93", "G#/Ab": "#8E8E93"
+    };
+
+    const tuningInfo = {
+        1: { label: "1弦 (E)", basePitch: 24, startNoteIdx: 4 },
+        2: { label: "2弦 (B)", basePitch: 19, startNoteIdx: 11 },
+        3: { label: "3弦 (G)", basePitch: 15, startNoteIdx: 7 },
+        4: { label: "4弦 (D)", basePitch: 10, startNoteIdx: 2 },
+        5: { label: "5弦 (A)", basePitch: 5,  startNoteIdx: 9 },
+        6: { label: "6弦 (E)", basePitch: 0,  startNoteIdx: 4 }
+    };
+    const chromaticScale = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+    let melodySequence = [];
+    let isPlaying = false;
+    let currentPlayIndex = -1;
+    let maxFretRange = 24;
+
+    const canvas = document.getElementById('melodyChart');
+    const ctx = canvas.getContext('2d');
+
+    buildFretboard();
+    drawEmptyChart();
+
+    function buildFretboard() {
+        const thead = document.getElementById('fretboard-head');
+        const tbody = document.getElementById('fretboard-body');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        const trHead = document.createElement('tr');
+        trHead.innerHTML = '<th>弦 \\ F</th>';
+        for (let f = 0; f <= maxFretRange; f++) {
+            let cls = "";
+            if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) cls = "dot-fret";
+            if (f === 12 || f === 24) cls = "double-dot-fret";
+            trHead.innerHTML += `<th class="${cls}">${f}</th>`;
+        }
+        thead.appendChild(trHead);
+
+        for (let s = 1; s <= 6; s++) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${tuningInfo[s].label}</td>`;
+            
+            let noteIdx = tuningInfo[s].startNoteIdx;
+            for (let f = 0; f <= maxFretRange; f++) {
+                let cls = "";
+                if ([3, 5, 7, 9, 15, 17, 19, 21].includes(f)) cls = "dot-fret";
+                if (f === 12 || f === 24) cls = "double-dot-fret";
+
+                const noteName = chromaticScale[noteIdx];
+                const td = document.createElement('td');
+                td.className = cls;
+                td.id = `cell-${s}-${f}`;
+                td.innerText = noteName;
+                
+                // CSS変数を使って各セルの色を動的に変更可能にしておく
+                td.style.setProperty('--note-color', noteColors[noteName] || '#333');
+                
+                td.onclick = (e) => handleFretClick(s, f, noteName);
+                tr.appendChild(td);
+                noteIdx = (noteIdx + 1) % 12;
+            }
+            tbody.appendChild(tr);
+        }
+        // 指板再生成時に、既存データに基づく履歴表示を復元
+        refreshFretboardMarks();
+    }
+
+    function switchFretRange(range) {
+        if (isPlaying) return;
+        maxFretRange = range;
+        document.getElementById('range-12').classList.toggle('active', range === 12);
+        document.getElementById('range-24').classList.toggle('active', range === 24);
+        buildFretboard();
+        drawMelodyChart();
+    }
+
+    function handleFretClick(stringNum, fret, noteName) {
+        if (isPlaying) return;
+
+        const pitchValue = tuningInfo[stringNum].basePitch + fret;
+        const noteData = {
+            step: melodySequence.length + 1,
+            note: noteName,
+            string: stringNum,
+            fret: fret,
+            pitch: pitchValue
+        };
+
+        melodySequence.push(noteData);
+        updateUI();
+        playBeep(164.81 * Math.pow(2, pitchValue / 12));
+    }
+
+    // ★新規追加: 1個戻る（Undo）機能
+    function undoLastNote() {
+        if (isPlaying) return;
+        if (melodySequence.length === 0) return;
+
+        melodySequence.pop(); // 配列の末尾を削除
+        updateUI();
+    }
+
+    // UIの描画状態をまるごと更新する関数
+    function updateUI() {
+        updateLog();
+        refreshFretboardMarks();
+        drawMelodyChart();
+    }
+
+    // ★一度でも使われた音のハイライト状態をスキャンして再適用する関数
+    function refreshFretboardMarks() {
+        // 一度すべての状態をクリア
+        document.querySelectorAll('.fretboard td').forEach(td => {
+            td.classList.remove('used-fret');
+        });
+
+        // シーケンス内の全データをスキャンしてクラスを付与
+        melodySequence.forEach(item => {
+            const targetCell = document.getElementById(`cell-${item.string}-${item.fret}`);
+            if (targetCell) {
+                targetCell.classList.add('used-fret');
+            }
+        });
+    }
+
+    function playMelodySequence() {
+        if (melodySequence.length === 0) return alert('メロディがありません。');
+        if (isPlaying) return;
+
+        isPlaying = true;
+        currentPlayIndex = 0;
+        document.getElementById('playBtn').innerText = "⏳ 再生中...";
+        document.getElementById('playBtn').disabled = true;
+        document.getElementById('undoBtn').disabled = true;
+
+        const playInterval = 400;
+
+        function playNextStep() {
+            if (currentPlayIndex >= melodySequence.length) {
+                isPlaying = false;
+                currentPlayIndex = -1;
+                document.getElementById('playBtn').innerText = "▶ メロディを流す";
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('undoBtn').disabled = false;
+                drawMelodyChart();
+                clearFretboardHighlights();
+                return;
+            }
+
+            clearFretboardHighlights();
+            const currentNote = melodySequence[currentPlayIndex];
+
+            const targetCell = document.getElementById(`cell-${currentNote.string}-${currentNote.fret}`);
+            if (targetCell) targetCell.classList.add('playing-now');
+
+            drawMelodyChart();
+            playBeep(164.81 * Math.pow(2, currentNote.pitch / 12));
+
+            currentPlayIndex++;
+            setTimeout(playNextStep, playInterval);
+        }
+        playNextStep();
+    }
+
+    function clearFretboardHighlights() {
+        document.querySelectorAll('.fretboard td').forEach(td => td.classList.remove('playing-now'));
+    }
+
+    function exportMelody() {
+        if (melodySequence.length === 0) return alert('メロディが空です！');
+        const jsonString = JSON.stringify(melodySequence, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'guitar_melody.json'; a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function importMelody(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (!Array.isArray(importedData)) throw new Error('配列形式ではありません。');
+                melodySequence = importedData;
+                updateUI();
+            } catch (err) {
+                alert('読み込みエラー: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
+    function clearMelody() {
+        if (isPlaying) return;
+        melodySequence = [];
+        updateUI();
+        drawEmptyChart();
+    }
+
+    function updateLog() {
+        document.getElementById('logView').innerText = "現在のシーケンス: \n" + JSON.stringify(melodySequence, null, 2);
+    }
+
+    function drawEmptyChart() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#999'; ctx.font = '14px sans-serif';
+        ctx.fillText('指板をクリックするか、JSONをインポートして「メロディを流す」を押してください', 240, 115);
+    }
+
+    // ★グラフ描画（固有の音カラー対応版）
+    function drawMelodyChart() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (melodySequence.length === 0) return drawEmptyChart();
+
+        const padding = 40;
+        const chartWidth = canvas.width - padding * 2;
+        const chartHeight = canvas.height - padding * 2;
+        const stepCount = Math.max(melodySequence.length, 6);
+        const xInterval = chartWidth / (stepCount - 1 || 1);
+        const maxPitchRange = 48; 
+
+        // 1. ベースのガイド線を薄いグレーで描画
+        ctx.beginPath();
+        ctx.strokeStyle = '#e5e5ea'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+        melodySequence.forEach((item, index) => {
+            const x = padding + index * xInterval;
+            const y = canvas.height - padding - (item.pitch / maxPitchRange) * chartHeight;
+            if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // 2. 音名ドットの描画（指定された固有カラーを適用）
+        melodySequence.forEach((item, index) => {
+            const x = padding + index * xInterval;
+            const y = canvas.height - padding - (item.pitch / maxPitchRange) * chartHeight;
+
+            // 各音に対応したカラーを取得（なければデフォルト黒）
+            const dotColor = noteColors[item.note] || '#333';
+
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = dotColor; // ★グラフドットを音名の色に同期
+            ctx.fill();
+
+            // 現在再生中の音のドットを二重丸にして強調
+            if (index === currentPlayIndex) {
+                ctx.beginPath();
+                ctx.arc(x, y, 10, 0, 2 * Math.PI);
+                ctx.strokeStyle = '#222';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#333'; ctx.font = 'bold 10px sans-serif';
+            ctx.fillText(`${item.note}(${item.string}弦${item.fret}F)`, x - 18, y - 12);
+        });
+
+        // 3. 再生バー（再生中のインジケータ）
+        if (isPlaying && currentPlayIndex >= 0 && currentPlayIndex < melodySequence.length) {
+            const currentX = padding + currentPlayIndex * xInterval;
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(34, 34, 34, 0.25)'; // シークバーは少しシックなダークグレーに変更
+            ctx.lineWidth = 3;
+            ctx.moveTo(currentX, padding / 2);
+            ctx.lineTo(currentX, canvas.height - padding / 2);
+            ctx.stroke();
+        }
+    }
+
+    function playBeep(freq) {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    }
+</script>
+
+</body>
+</html>
