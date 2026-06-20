@@ -61,7 +61,7 @@
             cursor: pointer;
         }
 
-        .mode-toggle-btn, .display-toggle-btn {
+        .mode-toggle-btn, .display-toggle-btn, .header-nav-link {
             padding: 8px 16px;
             font-size: 0.85rem;
             font-weight: bold;
@@ -72,7 +72,12 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .mode-toggle-btn:hover, .display-toggle-btn:hover {
+        .header-nav-link {
+            text-decoration: none;
+            display: inline-block;
+            box-sizing: border-box;
+        }
+        .mode-toggle-btn:hover, .display-toggle-btn:hover, .header-nav-link:hover {
             background: #f0f7ff;
         }
         /* 度数表示の時の特別色 */
@@ -497,6 +502,7 @@
             </div>
             <button id="displayToggleBtn" class="display-toggle-btn" onclick="toggleDisplayMode()">表示: 音名</button>
             <button id="modeToggleBtn" class="mode-toggle-btn" onclick="toggleMode()">アナライザーへ</button>
+            <a href="melody.html" target="_blank" rel="noopener noreferrer" class="header-nav-link">メロディ入力 ↗</a>
         </div>
     </div>
 
